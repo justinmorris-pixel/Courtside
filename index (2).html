@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Courtside practice scoreboard</title>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+<script src="firebase-config.js"></script>
+<style>
+:root{
+  --bg:#ffffff;--surface:#f3f3f1;--card:#ffffff;--text:#111111;--muted:#666660;--border:#d9d9d3;
+  --red:#d7261e;--redbg:#fbe9e8;--redtext:#8f1a14;
+  color-scheme:light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#111111;--surface:#232323;--card:#1a1a1a;--text:#f2f2ee;--muted:#a3a39c;--border:#363636;
+    --redbg:#3a1412;--redtext:#ff9a93;color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#111111;--surface:#232323;--card:#1a1a1a;--text:#f2f2ee;--muted:#a3a39c;--border:#363636;
+  --redbg:#3a1412;--redtext:#ff9a93;color-scheme:dark;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%;}
+html.tvmode{background:#000;}
+body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.4;}
+body.tvmode{background:#000;color:#fff;}
+*{box-sizing:border-box;}
+.wrap{max-width:560px;margin:0 auto;padding:14px 14px 48px;}
+.card{background:var(--card);border:0.5px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;}
+.muted{color:var(--muted);font-size:13px;}
+.small{font-size:12px;color:var(--muted);}
+h1{font-size:20px;font-weight:500;margin:0 0 4px;}
+.btn{font:inherit;font-size:15px;height:48px;border-radius:8px;border:0.5px solid var(--border);background:var(--surface);color:var(--text);padding:0 14px;cursor:pointer;touch-action:manipulation;}
+.btn:active{transform:scale(0.98);}
+.btn.red{background:var(--red);color:#fff;border-color:var(--red);font-weight:500;font-size:17px;}
+.btn.sm{height:38px;font-size:13px;}
+.btn.sel{background:var(--redbg);color:var(--redtext);border-color:var(--red);}
+.btn.sq{width:48px;padding:0;font-size:22px;}
+.clk{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:36px;font-weight:500;line-height:1.1;}
+.step{display:flex;align-items:center;gap:8px;}
+.step .val{min-width:64px;text-align:center;font-weight:500;}
+.list{border:0.5px solid var(--border);border-radius:8px;overflow:hidden;margin-top:10px;}
+.li{display:flex;justify-content:space-between;gap:8px;padding:7px 10px;font-size:14px;border-bottom:0.5px solid var(--border);}
+.li:last-child{border-bottom:none;}
+.li.cur{background:var(--redbg);color:var(--redtext);font-weight:500;}
+.li.done{color:var(--muted);}
+.banner{background:var(--redbg);color:var(--redtext);border-radius:8px;padding:8px 12px;font-size:13px;margin-bottom:12px;}
+a.big{display:block;text-align:center;padding:18px;border:0.5px solid var(--border);border-radius:12px;background:var(--card);color:var(--text);text-decoration:none;font-size:17px;font-weight:500;margin-bottom:12px;}
+a.big span{display:block;font-size:13px;font-weight:400;color:var(--muted);margin-top:4px;}
+.tv{height:100vh;height:100dvh;min-height:0;overflow:hidden;background:#000;color:#fff;display:flex;flex-direction:column;justify-content:space-between;padding:3vw 4vw;}
+.tv .top{display:flex;justify-content:space-between;color:#aaa;letter-spacing:0.2em;font-size:clamp(12px,1.6vw,26px);}
+.tv .mid{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;text-align:center;}
+.tv .fit{width:100%;transform-origin:center center;}
+html.tvmode,body.tvmode{overflow:hidden;}
+.tv .name{font-size:clamp(34px,7.5vw,150px);font-weight:500;line-height:1.1;}
+.tv .lbl{color:#aaa;letter-spacing:0.3em;font-size:clamp(12px,1.4vw,24px);margin-top:2vw;}
+.tv .clock{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:clamp(70px,22vw,420px);font-weight:500;line-height:1;letter-spacing:-0.03em;}
+.tv .extra{display:flex;justify-content:center;gap:6vw;margin-top:1.5vw;}
+.tv .extra .k{color:#aaa;letter-spacing:0.2em;font-size:clamp(11px,1.3vw,22px);text-align:center;}
+.tv .extra .v{font-size:clamp(28px,5vw,100px);font-weight:500;text-align:center;font-family:ui-monospace,Menlo,Consolas,monospace;}
+.tv .note{margin-top:2.2vw;font-size:clamp(18px,3vw,56px);line-height:1.3;color:#fff;}
+.tv .note .l{margin:0.25em 0;}
+.tv.withnote .clock{font-size:clamp(60px,15vw,300px);}
+.tv.withnote .name{font-size:clamp(30px,6vw,120px);}
+.tv .note.cols{columns:2;column-gap:5vw;text-align:left;display:inline-block;font-size:clamp(16px,2.5vw,46px);}
+.tv .note .l{break-inside:avoid;}
+.tv.withlist .clock{font-size:clamp(50px,11vw,220px);}
+.tv.withlist .name{font-size:clamp(28px,5vw,100px);}
+.tv .foot{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #2a2a2a;padding-top:1.2vw;color:#aaa;letter-spacing:0.2em;font-size:clamp(12px,1.6vw,26px);}
+.tv .foot b{color:#fff;font-weight:500;}
+.tv .motto{color:#d7261e;letter-spacing:0.35em;}
+.tv .snd{position:absolute;right:10px;bottom:10px;background:transparent;border:1px solid #333;color:#666;border-radius:6px;font-size:12px;padding:4px 8px;cursor:pointer;}
+.tv .st{position:absolute;left:10px;bottom:10px;color:#555;font-size:12px;}
+.sbv{height:100vh;height:100dvh;min-height:0;overflow:hidden;background:#0a0a0a;color:#fff;display:flex;flex-direction:column;gap:2vw;padding:3vw 4vw;}
+.sbmain{flex:1;min-height:0;display:flex;align-items:center;}
+.sbgrid{width:100%;transform-origin:center center;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr) minmax(0,1fr);gap:2vw;align-items:center;}
+.sbv .tn{color:#fff;font-size:clamp(20px,3.6vw,68px);letter-spacing:0.25em;font-weight:500;text-align:center;padding-left:0.25em;overflow:hidden;white-space:nowrap;}
+.sbv .bar{height:clamp(8px,1.4vw,26px);border-radius:2px;margin:0.5vw 0 1vw;}
+.sbv .box{background:#000;border:2px solid #1d1d1d;border-radius:4px;padding:1vw;}
+.sbv svg{display:block;width:100%;height:auto;}
+.sbv .gl{color:#e8e8e8;letter-spacing:0.4em;text-align:center;font-size:clamp(11px,1.3vw,24px);margin-bottom:0.8vw;}
+.sbg{display:flex;align-items:center;gap:1.2vw;}
+.sbq{flex-wrap:wrap;column-gap:3vw;row-gap:1vw;display:flex;justify-content:center;align-items:center;gap:1.5vw;margin-top:1.5vw;color:#9a9a9a;letter-spacing:0.3em;font-size:clamp(11px,1.3vw,24px);}
+.sbq .box{width:6vw;min-width:44px;padding:0.5vw 1vw;}
+.sbinfo{text-align:center;color:#e8e8e8;letter-spacing:0.15em;font-size:clamp(11px,1.5vw,28px);margin-top:1.2vw;line-height:1.5;}
+.sbfoot{text-align:center;color:#d7261e;letter-spacing:0.5em;font-size:clamp(11px,1.4vw,26px);}
+.sbv .snd{position:absolute;right:10px;bottom:10px;background:transparent;border:1px solid #333;color:#666;border-radius:6px;font-size:12px;padding:4px 8px;cursor:pointer;}
+.sbv .st{position:absolute;left:10px;bottom:10px;color:#555;font-size:12px;}
+@keyframes blink{0%{opacity:1}50%{opacity:0.1}100%{opacity:1}}
+.blink{animation:blink 1s steps(1,end) 6;}
+.inp{font:inherit;width:100%;height:40px;border-radius:8px;border:0.5px solid var(--border);background:var(--surface);color:var(--text);padding:0 8px;text-align:center;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;}
+.tin{width:92px;height:48px;text-transform:none;letter-spacing:0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:17px;padding:0 4px;}
+.btn.tmred{background:var(--red);color:#fff;border-color:var(--red);font-weight:500;}
+.btn.tmblk{background:#000;color:#fff;border-color:#888;font-weight:500;}
+
+[hidden]{display:none!important;}
+.ip{height:100vh;height:100dvh;display:flex;flex-direction:column;gap:10px;padding:10px 14px;}
+.ip-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+.ip-top b{font-size:20px;}
+.ip-acts{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.ipbtn{font:inherit;font-size:17px;min-height:56px;padding:0 20px;border-radius:12px;border:0.5px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;touch-action:manipulation;}
+.ipbtn:active{transform:scale(0.98);}
+.ipbtn.red{background:var(--red);color:#fff;border-color:var(--red);font-weight:500;}
+.ipbtn.big{min-height:76px;font-size:22px;}
+.ip-main{flex:1;min-height:0;}
+#i_drill.ip-main{display:grid;grid-template-columns:minmax(240px,1fr) 2.4fr;gap:12px;}
+.ip-list{overflow:auto;margin:0;}
+.ip-panel{display:flex;flex-direction:column;gap:10px;min-height:0;overflow:auto;}
+.ip-panel .card{margin:0;}
+.ip-clocks{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.ip-big{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:clamp(48px,10vh,104px);font-weight:500;line-height:1.05;}
+.ip-row{display:flex;gap:10px;margin-top:10px;}
+.ip-row .ipbtn{flex:1;}
+.ip-nav{display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-top:auto;}
+.ip-name{font-size:clamp(26px,5vh,48px);font-weight:500;line-height:1.1;}
+#i_sb.ip-main{display:flex;flex-direction:column;gap:10px;}
+.ip-scorebar{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center;background:#0a0a0a;border-radius:14px;padding:10px 14px;color:#fff;}
+.ip-team{display:flex;align-items:center;gap:16px;}
+.ip-team.red{border-left:12px solid #d7261e;padding-left:14px;}
+.ip-team.blk{justify-content:flex-end;border-right:12px solid #fff;padding-right:14px;}
+.ip-tname{font-size:clamp(18px,3.4vh,34px);letter-spacing:0.25em;font-weight:500;}
+.ip-score{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:clamp(56px,14vh,150px);font-weight:500;line-height:1;}
+.ip-mid{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;}
+.ip-clockbtn{background:#000;color:#fff;border:2px solid #333;border-radius:12px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:clamp(44px,11vh,120px);padding:4px 24px;cursor:pointer;line-height:1.05;touch-action:manipulation;}
+.ip-meta{display:flex;gap:14px;align-items:center;color:#aaa;letter-spacing:0.2em;font-size:14px;}
+.ip-shot{background:#000;color:#fff;border:2px solid #333;border-radius:10px;font:inherit;font-size:18px;padding:6px 14px;cursor:pointer;touch-action:manipulation;}
+.ip-shot b{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:30px;font-weight:500;margin-left:8px;}
+.ip-court{position:relative;flex:1;min-height:0;background:#111;border-radius:14px;overflow:hidden;border:1px solid #2a2a2a;}
+.ip-court svg{position:absolute;inset:0;width:100%;height:100%;}
+.ip-pts{position:absolute;top:0;bottom:0;transform:translateX(-50%);display:flex;flex-direction:column;justify-content:space-evenly;align-items:center;padding:8px 0;}
+.ip-pt{width:min(22vh,16vw);height:min(22vh,16vw);border-radius:50%;font:inherit;font-size:clamp(28px,6.5vh,64px);font-weight:500;cursor:pointer;touch-action:manipulation;border:5px solid #fff;color:#fff;}
+.ip-pt.red{background:#d7261e;}
+.ip-pt.blk{background:#000;}
+.ip-pt:active{transform:scale(0.96);}
+.ip-undo{position:absolute;left:50%;top:14px;transform:translateX(-50%);min-width:160px;}
+.ip-start{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);min-width:260px;}
+.ip-bottom{display:flex;gap:10px;flex-wrap:wrap;}
+.ip-bottom .ipbtn{flex:1;min-width:150px;}
+.ip-sit{background:var(--redbg);color:var(--redtext);padding:8px 14px;border-radius:10px;font-size:16px;}
+.ip-sheet{position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:flex-start;justify-content:center;padding:16px;z-index:50;overflow:auto;}
+.ip-sheetbox{background:var(--bg);color:var(--text);border-radius:16px;max-width:640px;width:100%;padding:14px;}
+@media (max-width:900px){#i_drill.ip-main{grid-template-columns:1fr;}.ip-list{max-height:22vh;}.ip-clocks{grid-template-columns:1fr;}}
+
+/* APPROVED DESIGN: fixed black, white type, restrained red. */
+:root,:root:not([data-theme="light"]),:root[data-theme="dark"],:root[data-theme="light"]{--bg:#000;--surface:#000;--card:#000;--text:#fff;--muted:#fff;--border:#383838;--red:#d7261e;--redbg:#130302;--redtext:#fff;color-scheme:dark}
+body{background:#000;color:#fff}.btn.tmblk{background:#000}.card{background:#000}.sbv{background:#000}.sbv .box{border:0;background:#000}.sbv .tn{color:#fff}.sbv .bar{width:40px;height:4px;min-height:4px;margin:12px auto;background:#d7261e!important}.sbfoot{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;color:#d7261e;letter-spacing:.1em}.sbv .gl,.sbq,.sbinfo,.tv .top,.tv .lbl,.tv .extra .k,.tv .foot{color:#fff}.sbv .foullabel{text-align:center;font-size:clamp(12px,1.5vw,24px);letter-spacing:.15em;margin-top:18px}.sbv svg.foulsvg{width:clamp(60px,10vw,160px);margin:8px auto 0}.sbgrid{align-items:start}.tv .clock svg{display:block;width:min(74vw,900px);max-height:42vh;margin:0 auto}.tv .foot{border:0;flex-wrap:wrap;gap:16px}.tv .foot .upnext{flex-basis:100%;font-size:clamp(12px,1.3vw,20px)}.tv .motto{color:#d7261e;letter-spacing:.1em}.controller-mottos{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;color:#d7261e;font-weight:600;letter-spacing:.1em;padding:14px}.ip>.controller-mottos{flex-shrink:0}.ip-foul{background:#000;color:#fff;border:1px solid #d7261e;border-radius:8px;font:inherit;min-height:48px;padding:8px 18px;touch-action:manipulation}.ip-foultotal{color:#fff;font-size:14px;letter-spacing:.06em;margin-top:8px}.ip-foultotal b{font-size:24px;margin-left:6px}.ip-pt{width:min(17vh,13vw);height:min(17vh,13vw);min-width:48px;min-height:48px}.ip-pt.red{background:#000;border-color:#d7261e}.ip-pt.blk{background:#000}.ip-court{background:#000;border:0}.ip-court svg{opacity:.55}.ip-scorebar{background:#000}.ip-team.red{border-left-width:4px}.ip-team.blk{border-right:0}.ip-clockbtn,.ip-shot{border:0}.ip-meta{color:#fff}.foulcontrols{border-top:1px solid #333;margin-top:14px;padding-top:12px}.foulcontrols>div{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}#c_dbg,#s_dbg,.st{display:none}.handoff{max-width:900px;margin:auto;padding:24px}.handoff p,.handoff li{line-height:1.6}.handoff h2{color:#fff;border-left:3px solid #d7261e;padding-left:12px}.handoff a{color:#fff}.handoff nav{display:flex;gap:12px;flex-wrap:wrap}.handoff code{color:#fff}.ip-sheetbox{background:#000}.ip .ip-main{min-height:340px}
+@media(max-width:600px){.ip{height:auto;min-height:100dvh}.ip-scorebar{grid-template-columns:1fr 1fr}.ip-mid{grid-column:1/-1;grid-row:1}.ip-team,.ip-team.blk{justify-content:center;gap:10px}.ip-court{min-height:420px;flex:none}.ip-tname{font-size:18px}.ip-score{font-size:60px}.ip-start{min-width:160px;font-size:18px}.ip-undo{min-width:130px}.ip .ip-main{min-height:0}.ip-pt{width:72px;height:72px}.sbgrid{gap:1vw}.sbv .tn{letter-spacing:.1em}.tv .foot .motto{font-size:clamp(14px,2vw,26px)}}
+
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+var PLANS={
+ p23:{id:"p23",title:"Practice 23",date:"Friday, Nov 6",start:870,total:80,drills:[
+  {n:"Stretch",m:3,note:"",clk:true},
+  {n:"Sideline Ballhandling",m:5,note:"Have Desmond lead this.",clk:true,list:["Skip pounds","Skip between","Three dribbles cross","Three dribbles between","Three dribbles behind","Cross between behind","Three betweens","Two ball","Two ball cross"]},
+  {n:"4 corner passing",m:2,note:"4 balls",clk:true,tv:60,nt:false},
+  {n:"Cardinal Drill",m:3,note:"",clk:true},
+  {n:"Shooting Tune Ups",m:3,note:"Load Shots, Roll Ups, Pistol Shots",clk:true},
+  {n:"Line Shooting",m:8,note:"Finish in 8 minutes. Run a \u201c22\u201d if not. If you miss a lay up, wall sits until they are done with the lay ups.",clk:true},
+  {n:"Contested Shooting",m:5,note:"Groups of 3-4. Shot ready",clk:true},
+  {n:"4 Point Shooting",m:5,note:"2 mins per person / Player must shoot 15ft, 3pt, NBA consecutively the entire time. 15ft = 1pt, 3\u2019s = 2pts, NBA = 4pts",clk:true,tv:120},
+  {n:"1 min Grind",m:7,note:"",clk:true},
+  {n:"4 vs 2 Ball Screens",m:10,note:"",clk:true},
+  {n:"1 vs 1 1 Dribble",m:2,note:"1 dribble. Start at FT line.",clk:true},
+  {n:"1 vs 1 Pound",m:3,note:"O - Seek Contact / D - Wall Up",clk:true},
+  {n:"2 vs 2 DHO",m:4,note:"Compete!",clk:true},
+  {n:"3 vs 3",m:10,note:"Split/Jungle",clk:true},
+  {n:"5 vs 0",m:10,note:"Chin",clk:true}
+ ]},
+ p21:{id:"p21",title:"Practice 21",date:"Wednesday, Nov 4",start:870,total:122,drills:[
+  {n:"Weight Room",m:30,note:"",clk:false},
+  {n:"Stretch",m:3,note:"",clk:true},
+  {n:"Sideline Ballhandling",m:5,note:"Have Desmond lead this.",clk:true,list:["Skip pounds","Skip between","Three dribbles cross","Three dribbles between","Three dribbles behind","Cross between behind","Three betweens","Two ball","Two ball cross"]},
+  {n:"4 corner passing",m:2,note:"4 balls",clk:true,tv:60,nt:false},
+  {n:"Box Drills",m:4,note:"Two foot finishes. 1. Pro hop. 2. Donut. 3. Reverse Donut. 4. Step-Thru.",clk:true},
+  {n:"Fast Break in 2s",m:5,note:"",clk:true},
+  {n:"Left Handed 1 vs 1",m:3,note:"",clk:true},
+  {n:"Sting the Stinger",m:4,note:"",clk:true},
+  {n:"Shell Drill 4-on-4",m:8,note:"1. Help the helper. 2. Cutters.",clk:true},
+  {n:"Perfect Defense",m:10,note:"No paint touches, talk, charges get you off the floor.",clk:true,tv:120,pd:true},
+  {n:"Line Transition D",m:5,note:"1. 1st 3 steps. 2. Find the ball. 3. Build a wall.",clk:true},
+  {n:"5 vs 0",m:10,note:"Rub, Wing Entry, Return",clk:true},
+  {n:"4 vs 4",m:8,note:"Return",clk:true},
+  {n:"5 min shooting drill",m:10,note:"40+ = Green Light Shooter / 31-40 = Yellow Light / 30 or Below = Red Light",clk:true},
+  {n:"4 min quarters",m:15,note:"Half court man/Princeton",clk:true}
+ ]},
+ p22:{id:"p22",title:"Practice 22",date:"Thursday, Nov 5",start:870,total:126,drills:[
+  {n:"Weight Room",m:30,note:"",clk:false},
+  {n:"Film",m:10,note:"Chin",clk:false},
+  {n:"5 vs 0",m:10,note:"Chin",clk:true},
+  {n:"Stretch",m:3,note:"",clk:true},
+  {n:"Sideline Ballhandling",m:5,note:"Have Desmond lead this.",clk:true,list:["Skip pounds","Skip between","Three dribbles cross","Three dribbles between","Three dribbles behind","Cross between behind","Three betweens","Two ball","Two ball cross"]},
+  {n:"4 corner passing",m:2,note:"4 balls",clk:true,tv:60,nt:false},
+  {n:"Line Shooting",m:8,note:"Finish in 8 minutes. Run a \u201c22\u201d if not. If you miss a lay up, wall sits until they are done with the lay ups.",clk:true},
+  {n:"Cardinal Drill",m:3,note:"",clk:true},
+  {n:"Skeleton Gap",m:2,note:"Work on being in the 40. Keep feet hot. Hands active (sting).",clk:true},
+  {n:"3 vs 2 Gap and Sting",m:5,note:"",clk:true},
+  {n:"Shell Drill 4-on-4",m:8,note:"1. Help the helper. 2. Cutters.",clk:true},
+  {n:"Perfect Defense",m:10,note:"No paint touches, talk, charges get you off the floor.",clk:true,tv:120,pd:true},
+  {n:"3 vs 3",m:10,note:"Split/Jungle",clk:true},
+  {n:"5 vs 0 to 5 vs 5",m:10,note:"Rub/Wing/Low/Return/Chin",clk:true},
+  {n:"Free Throw Game",m:10,note:"",clk:true}
+ ]},
+ p00:{id:"p00",title:"Test plan",date:"Conditioning and Situations",start:870,total:17,drills:[
+  {n:"Conditioning",m:10,note:"",clk:true,tv:22,pre:[22,11,34,46]},
+  {n:"Water Break",m:2,note:"",clk:true},
+  {n:"Situations",m:5,note:"",clk:true}
+ ]}
+};
+var DEFAULT_PLAN="p23";
+var BUILD="courtside 2";
+/* ===== Practice import: library, saved drill settings, plan reader ===== */
+var LIB=["Two-Ball Stationary Handling","Mikan Drill","Two-Line Layups","Contact Finishing","1 vs 2 Full Court to 2 vs 1","Zig Zag Dribbling","1 vs 1 Full Court","2 vs 2 Rugby","Camp Ballhandling","Dribble Knockout","Dribble Tag","Handy Ballhandling","Kill the Grass","Sideline Ballhandling","Stationary Dribbling","Steal the Ball","Vanilla Dribbling","Box Drills","Finishing School","Finishing Series","Box Drills w/D","20 Pass Game","Flow Passing","Passing Lines","Press Breaker Pass","Stationary Passing","1 vs 1 + 1 Exit Cuts","1 vs 1 1 Dribble","1 vs 1 7's","1 vs 1 Action","1 vs 1 Around the Arc","1 vs 1 at half","1 vs 1 Barkley","1 vs 1 Barkley/Nash","1 vs 1 Battlestar","1 vs 1 Finish off Cut","1 vs 1 Gets","1 vs 1 Nash","1 vs 1 No dribble","1 vs 1 Pound","1 vs 1 Reset","1 vs 1 Spot Arc","2 vs 2 Barkley","2 vs 2 Follow","2 vs 2 Ghost","2 vs 2 Trigger","Blood 33 Drill","Go Step Intro","PnR 2 vs 2 + 1","Dribbling","Shooting","Stations","1 vs 1 Block","1 vs 1 Blood Drill","1 vs 2 Full Court","3 Line Perfect Pass","4 corner passing","Ball handling with Coach Bryant","Chaos Passing","Cone Dribbling","Fundamental Lines","Keep Away","Left Handed 1 vs 1","Schape Shooting","Square Passing","Trash Can Ballhandling","Two Ball Dribbling","When/How to Finish","Dynamic Warm-up","3-on-2, 2-on-1 Continuous","11-Man Break","Transition Defense Sprint-Back","3 vs 0 Fusion","5 vs 0","Classroom","Demon Time","Identity","Install","Pillars/Standards","Princeton Series Intro","Shooting Warm-Ups","Speaker","Starting Line Up","Team Meeting","1 vs 2 finishing","2 vs 2 sideways","3 vs 1 Transition","3 vs 3 Break and Bolt","Advantage Transition","Bolt and Bomb","Circle the Wagons","Fast Break in 2s","Fast Break in 3s","Fast Break Shootout","Zone Rebounding to Transition","Racker/Runner Transition","4 vs 3 Transition","Blitz","Cardinal Drill","Casino Game","Fast Break in 1s","Gauntlet","Line Transition D","Progression Advantage Drill","Progression Disadvantage Drill","3 man weave","Fastbreak Shootout Lines","4 vs 0 Gulf Coast","Chaos Layups","Pregame Warm Up","Stretch","Tip Drill","2 Man Break","2 vs 2 Break and Bolt","2 vs 2 DHO","5 vs 0 to 5 vs 5 Guided","Blood Drills","Boom 1-2","Circle Movement Shooting","Dribble At","Exit Interviews","FC Lay-Ups","FT Break","Hunt the Paint","Jump Ropes","Panther Lay Ups","Power Position","Pre Practice Routine","Pregame Walk Thru","Read Line","Defensive Slides","Closeouts","Shell Drill 4-on-4","1-on-1 Full-Court Contain","Charge Drill","Circle Box-Out","War Rebounding 3-on-3","2 vs 2 closeouts","22 Review","3 vs 3 Cutters","3 vs 3 exchange","4 vs 3 Scramble","Ball Screen Coverage","Basic Defense","BLOB defense","Drop Intro","Drop Zone","Memphis Closeouts","Nova/Midnight Review","Orange Shell","Skeleton Zones","Tip Transiton Defense","Vegas Closeouts","X and Shooting","X Shell","Zone Closeouts","Zone Peel Outs","Zone Shell","Zone Shell/Rebounding","\"13\" Install","\"32\" intro","HC Possessions Zone","Man Shell","Zone Defense","2 vs 2 War","Pad Rebounding to Race","1 min Grind","1-3-1","2 on 2 Rebounding","2 vs 1 Sting","22","3 line Jump to Ball","3 Spot Ball Screens","3 vs 2 Ball Screen Defense","3 vs 2 Gap and Sting","4 vs 5","5 across","51","52","55/51","6 vs 5","Airplane Mode","Alley Drill","Banded Slides","Box and 1","Carolina","Continuous Ball Screens","Defense","Defense Scouting Report","Demon Drills","Drop Review","HC Defense Review","Line Rebounding","Memphis 3 Player Closeout","Nova","Orange / 2-3 zone","Orange Breakdowns","Orange Review","Packline Shell","Pad Rebounding","Point Zone","Post Defense","Purdue Verticality Drill","Red Review","Run and Jump \"Demon\"","Shell Defense","Shell to Transition","Skeleton D","Skeleton Gap","Slide and Sprint","Sting the Stinger","Triangle & 2","Form Shooting","5-Spot Shooting","Curl & Flare Shooting","Beat the Pro","Free Throws Under Fatigue","Sixty-Second 3s","4 Point Shooting","4 point test","5 min shooting drill","52 point Shooting Drill","8 min shooting","Air Drop Shots","Air Drop/One Foot Moves","BDT Shooting","Beal Shooting Test","BEEF Shooting","Boomerang Shooting","Buffalo Shooting","Contested Shooting","Decision Shooting","Demon Shooting","Elbow to Elbow Shooting","Fan Shooting","Fingers Shooting","Free Throw Conditioning","Free Throw Game","Free Throw Golf","Free Throws","Fusion Shooting","Gotcha","Green Light Shooting Drills","Line Shooting","Load Shots","Olympic Shooting","Partner Shooting","Pistol Shots","Pressure Shooting","Pull Shooting","Push-Pull Shooting","Rocker Shooting","Roll Up Shooting","Team Shooting","TV Shooting","1 More Shooting","2 Plus 2 Shooting","2 vs 2 shooting","3 vs 3 shooting","50 Shots","Bradley Shooting","Dribble At/Circle Movement","Free Throws/Water Break","Money Basket","Olympic Lay Ups","Ray Allen Ladder Shooting","Shooting Tune Ups","Zone Shooting","Princeton: Point","Princeton: Point Progressions","Princeton: Wing Entry","Princeton: Low Post","Princeton: Return","Princeton: Chin","Princeton: Phase Review","Princeton: Secondary Break","Princeton: Full Run-Through","Offense Walkthrough (5-on-0)","Controlled Scrimmage 5-on-5","Press Break","BLOB / SLOB","Late-Game Situations","BLOBs/SLOBsperfe","Triggers","5 vs 0 Alignment","BLOBs","Rose Series Intro","Zone Offense","Zone Triggers","4 vs 2 Lava","4 out Intro","Handling Pressure Intro","Pistol Series Intro","Rules of Offense","Diamond Trapping","1 vs 1 Lock Full Court","End of Game Situations","1 vs 1 +","1 vs 1 + 1","Triggers Intro","2 vs 0","3 Man Post Ups","3 man R & R","3 man R & R Zone","3 vs 0","3 vs 3 Get/Split","4 out 1 in","4 vs 4","4 vs 4 zone","5 vs 0 Fusion","5 vs 0 Transition Defense","Air Born Shooting","Ball Screens","Cross Step to Shot","Cut, Screen, Laker","Drive and Pitch","Extra Drills to Fill in","Fist","Flow Breakdowns","Flow Intro","Flow Lines","Flow Lines vs Zone","Flow Lines w/D","Fusion Offense","Gameday Walkthrough","Guards/Post","HC Offense vs Zone","HC Possessions Man","Hoosier Passing","How to Shoot a FT","How to Think Like a Shooter","Laker Cuts","Live Ball Move to Shot","Mid-Range Shots","No Dribble Offense","Offense Intro","Offense Review","Offense vs 1-3-1","Pass & Cuts","Pass and Cut Back Screen","Pass and Cut Draft Drive","Pass and Cut Intro","Pass and Cut Lay-Up","Pass, Cut, Inside-out","Pass, Cut, Post Move","Pass, Cut, Post, Laker Cut","Pass, Cut, Screen Out","Press O Breakdown","Press Offense \"Red\"","Pressure Releases","R & R Zone Offense","Read Line/Dribble At","Real Estate","Safety Valve","Set Intros","Shoot-a-thon FT's","Situations","Skills","Spot Shots","Swish Shots","Tap Shooting","Triangle offense","Up 3 Shooting","Zone Offense Breakdown","Zone Offense Review","Zone Open","1 vs 1 Burst","2 vs 1 Shooting","2 vs 2 Advantage","2 vs 2 Blind Pass","2 vs 2 Burst","3 vs 3 Blind Back","4 vs 2 Flow","4 vs 2 Gulf Coast","4 vs 3 Flow","4 vs 4 Flow","1 v 1 cone","1 vs 1","2 vs 1","2 vs 2","3 Trips","3 vs 3","3 vs 3 Full Court","4 min quarters","5 vs 0 to 5 vs 5","5 vs 5 No Dribble","5 vs 5 to 5","5 vs 5 vs 5","8 min quarters","Dribble Races","FC Man Disadvantage Scrimmage","FC Man Scrimmage","FC Zone Scrimmage","HC Def Disadvantage","HC Man Scrimmage","HC Off Disadvantage","HC Zone Scrimmage","Hot Shot","Perfect Defense","Race Car","1 vs 1 + 1 Blast Cuts","1 vs 1 + 1 Burst","1 vs 1 + 1 DHO","1 vs 1 Advantage","1 vs 1 Blind Pass","1 vs 1 Handoff","1 vs 1 King of the Court","2 vs 1 Gets Decisions","2 vs 2 + 1 Splits","2 vs 2 +1","2 vs 2 Action","2 vs 2 Gets","2 vs 2 No Dribble","2 vs 2 Pin Downs","2 vs 2+1 Away","3 v 3 FIBA","3 vs 3 Action","3 vs 3 Ball Screens","3 vs 3 Get","3 vs 3 Ghost","3 vs 3 Split","4 v 4 Advantage","4 vs 3 Dominos","Make Space Drill","2 vs 2 Ball Screens","3 vs 3 DHOs","4 vs 2 Ball Screens","4 vs 3 Flow FC","5 pass deny","5 vs 5 HC","Burst Closeouts","Corner Game","Cowley County Drill","Defensive Cut Throat","Eddie Sutton Drill","Free Throw Press","Free Throw Transition","HC Scrimmage","King of the Court","Passing Game","Post Game","Progressive Drill","Small Sided Games","Ugly Scrimmage","Zone Scrimmage","17s","1-3-5-7-5-3-1","Baseball Conditioning","Chase Drill","Chase Drill w/Ball","Conditioning","Gasers","Running for Missed Practice","Syracuse Conditioning","Ladder Conditioning","Awards","Ballhandling Lines","Break","Hand Out T-Shirts","Hop Shots","Introduction","Mass Defense","Mass Shooting","Registration","Stops and starts","Stops, starts, and pivots","1 vs 1 Tournament","3 vs 3 Games","Dribble Tag/Knockout","Finish Registration","Fundamentals","Shooting Clinic","Swings","Water Break","Team Talk","Defense Day 1","Define Win the Moment","Hero, Hardship, Highlight","Lead'em Up","Offense Day 3","Huddle","Film","Scout","Weight Room","7 Rules of Green Team","Court Sessions","End of Girls Practice","End of Skills","Film/Scouting Report","Fundraiser","Green Standards","Green Team","JV Meeting","Meet with Freshmen and Sophomores","Offense Day 1","Opponent vs Zone","Player Commitments","Preview Night Prep","Scouting Report","Shot Selection Video"];
+function normName(s){return String(s||"").toLowerCase().replace(/[^a-z0-9]+/g," ").replace(/\s+/g," ").trim();}
+var LIBN={};LIB.forEach(function(n){LIBN[normName(n)]=n;});
+var DSET={};
+(function(){Object.keys(PLANS).forEach(function(pid){PLANS[pid].drills.forEach(function(d){var k=normName(d.n).replace(/ perfect defense rules built$/,"");if(DSET[k]){return;}var o={};["tv","pre","pd","list","nt"].forEach(function(f){if(d[f]!==undefined){o[f]=d[f];}});if(d.clk===false){o.clk=false;}DSET[k]=o;});});})();
+function bigrams(s){var o={};for(var i=0;i<s.length-1;i++){o[s.substr(i,2)]=(o[s.substr(i,2)]||0)+1;}return o;}
+function dice(a,b){if(a===b){return 1;}if(a.length<2||b.length<2){return 0;}var x=bigrams(a),y=bigrams(b),hit=0,tot=0,k;for(k in x){tot+=x[k];if(y[k]){hit+=Math.min(x[k],y[k]);}}for(k in y){tot+=y[k];}return 2*hit/tot;}
+function knownDrill(name){var k=normName(name);if(LIBN[k]||DSET[k]){return true;}var best=0;for(var i=0;i<LIB.length;i++){var s=dice(k,normName(LIB[i]));if(s>best){best=s;}}return best>=0.86;}
+function settingsFor(name){var k=normName(name);if(DSET[k]){return DSET[k];}if(k.indexOf("perfect defense")===0){return DSET["perfect defense"]||{};}return {};}
+function smartText(s){return s.replace(/(^|[\s(\[])"/g,"$1\u201c").replace(/"/g,"\u201d").replace(/(\w)'(\w)/g,"$1\u2019$2").replace(/(^|[\s(\[])'/g,"$1\u2018").replace(/'/g,"\u2019");}
+function to24(h,m,ap){h=parseInt(h,10);m=parseInt(m,10);if(ap){ap=ap.toUpperCase();h=h%12+(ap==="PM"?12:0);}else if(h<7){h+=12;}return h*60+m;}
+function parsePlanText(raw){
+ var warn=[],lines=String(raw||"").replace(/\r/g,"").replace(/\u00a0/g," ").replace(/[\u2013\u2014]/g,"-").split("\n");
+ var num=null,title="Practice",date="",start=null,total=null,drills=[],lastNote=null;
+ var reHead=/^\s*Practice\s*#?\s*(\d+)\b/i;
+ var reDate=/((?:Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day),?\s*([A-Za-z]+)\s+(\d{1,2})(?:,\s*\d{4})?,?\s*(\d{1,2}):(\d{2})\s*([AP]M)?\s*to\s*(\d{1,2}):(\d{2})\s*([AP]M)?\s*\((\d+)\s*min/i;
+ var reDrill=/^\s*(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\s+(.+?)\s*\((\d+)\s*min(?:s|utes)?\)\s*(?:-\s*(.*))?$/i;
+ var stop=false,firstStart=null;
+ lines.forEach(function(L){
+  if(stop){return;}
+  if(!L.trim()){return;}
+  var m=reDrill.exec(L);
+  if(m){
+   var mins=parseInt(m[6],10),a=to24(m[1],m[2]),b=to24(m[3],m[4]);
+   var diff=((b-a)%720+720)%720;
+   if(firstStart===null){firstStart=a;}
+   var nm=m[5].replace(/\s+/g," ").trim();
+   if(diff&&diff!==mins){warn.push("“"+nm+"”: the times say "+diff+" min but the plan says "+mins+" min. Using "+mins+".");}
+   var d={n:nm,m:mins,note:"",clk:true};
+   var st=settingsFor(nm);for(var f in st){d[f]=st[f];}
+   if(m[7]){d.note=smartText(m[7].trim().replace(/[,\s]+$/,""));}
+   drills.push({d:d,known:knownDrill(nm)});lastNote=drills.length-1;return;
+  }
+  var h=reHead.exec(L);
+  if(h){if(num!==null){warn.push("The text has more than one practice. Only the first is loaded.");stop=true;return;}num=h[1];title="Practice "+h[1];return;}
+  var dm=reDate.exec(L);
+  if(dm){date=dm[1]+", "+dm[2].slice(0,3)+" "+parseInt(dm[3],10);start=to24(dm[4],dm[5],dm[6]);total=parseInt(dm[10],10);return;}
+  if(lastNote!==null){var x=drills[lastNote].d;x.note=(x.note?x.note+" ":"")+smartText(L.trim().replace(/[,\s]+$/,""));}
+ });
+ if(!drills.length){return {ok:false,error:"I couldn’t find any drill lines. Paste the plan exactly as it comes out of the planner, with lines like “2:30-2:33  Stretch (3 min)”."};}
+ var sum=0;drills.forEach(function(x){sum+=x.d.m;});
+ if(start===null){start=firstStart;warn.push("No date and start-time line found. Using the first drill’s time as the start.");}
+ if(total===null){total=sum;}
+ if(total!==sum){warn.push("The header says "+total+" min but the drills add up to "+sum+" min.");}
+ var id="p"+(num!==null?num:String(Date.now()).slice(-6));
+ var unknown=[];drills.forEach(function(x){if(!x.known){unknown.push(x.d.n);}});
+ var plan={id:id,title:title,date:date||"Imported plan",start:start,total:total,drills:drills.map(function(x){return x.d;})};
+ return {ok:true,plan:plan,warnings:warn,unknown:unknown};
+}
+function mergePlans(map){
+ var changed=false;
+ Object.keys(map||{}).forEach(function(id){
+  var p=map[id];
+  if(!p||!Array.isArray(p.drills)||!p.drills.length||typeof p.title!=="string"){return;}
+  for(var i=0;i<p.drills.length;i++){var d=p.drills[i];if(!d||typeof d.n!=="string"||typeof d.m!=="number"||!(d.m>0)){return;}}
+  if(JSON.stringify(PLANS[id])!==JSON.stringify(p)){PLANS[id]=p;changed=true;}
+ });
+ if(changed&&S){S=normalize(S);applyPlan();if(cur){cur.update();}}
+}
+var fbBase=null,CODE_KEY="courtside-room",LOCAL_STATE="courtside-local-state",LOCAL_PLANS="courtside-local-plans";
+function getCode(){try{return localStorage.getItem(CODE_KEY)||"";}catch(e){return "";}}
+function fbReady(){return typeof FIREBASE_CONFIG==="object"&&FIREBASE_CONFIG&&typeof FIREBASE_CONFIG.databaseURL==="string"&&FIREBASE_CONFIG.databaseURL.indexOf("YOUR")<0&&typeof firebase==="object"&&!!firebase.initializeApp;}
+function savePlan(plan){
+ PLANS[plan.id]=plan;
+ if(fbBase){return fbBase.child("plans/"+plan.id).set(JSON.stringify(plan));}
+ try{var m=JSON.parse(localStorage.getItem(LOCAL_PLANS)||"{}");m[plan.id]=plan;localStorage.setItem(LOCAL_PLANS,JSON.stringify(m));}catch(e){}
+ return Promise.resolve();
+}
+function loadImported(plan){
+ savePlan(plan);
+ mutate(function(s){var n=defaultState(plan.id);for(var k in n){s[k]=n[k];}});
+}
+function escH(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+var addArmed=false,addTimer=null,addParsed=null;
+function buildAdd(){
+ document.documentElement.classList.remove("tvmode");document.body.classList.remove("tvmode");
+ el("root").innerHTML='<div class="wrap"><div class="row" style="margin-bottom:10px;"><h1>Add today’s practice</h1><a href="#ipad" style="color:#fff;">Back</a></div>'+
+ '<p class="muted" style="margin:0 0 10px;">Paste the plan exactly as it comes out of your planner, then tap Read plan.</p>'+
+ '<textarea id="a_txt" spellcheck="false" style="width:100%;min-height:220px;background:#000;color:#fff;border:1px solid #383838;border-radius:8px;padding:10px;font:inherit;font-size:14px;" placeholder="Practice #24 (All teams)&#10;Monday, November 9, 2026, 2:30 PM to 3:50 PM (80 min)&#10;&#10;2:30-2:33  Stretch (3 min)"></textarea>'+
+ '<div style="display:flex;gap:8px;margin:10px 0;"><button class="btn red" id="a_read" style="flex:1;">Read plan</button><button class="btn" id="a_clear">Clear</button></div>'+
+ '<div id="a_out"></div></div>';
+ cur={update:function(){}};
+ addParsed=null;addArmed=false;
+ el("a_clear").onclick=function(){el("a_txt").value="";el("a_out").innerHTML="";addParsed=null;};
+ el("a_read").onclick=function(){
+  var r=parsePlanText(el("a_txt").value),out=el("a_out");addParsed=null;addArmed=false;
+  if(!r.ok){out.innerHTML='<div class="banner">'+escH(r.error)+'</div>';return;}
+  addParsed=r.plan;var P=r.plan,h='<div class="card"><div class="row"><b>'+escH(P.title)+'</b><span class="muted">'+escH(P.date)+'</span></div><div class="muted" style="margin-top:4px;">Starts '+clockTime(P.start)+' · '+P.total+' min · '+P.drills.length+' drills · ends '+clockTime(P.start+P.total)+'</div>';
+  h+='<div class="list">';
+  P.drills.forEach(function(d,i){
+   var bits=[];if(d.tv){bits.push("TV timer "+mmss(d.tv));}if(d.list){bits.push("list on TV");}if(d.pd){bits.push("Perfect Defense rules");}if(d.clk===false){bits.push("no clock");}if(d.pre){bits.push("presets");}
+   h+='<div class="li"><span>'+(i+1)+'. '+escH(d.n)+(bits.length?'<div class="small">'+escH(bits.join(" · "))+'</div>':'')+(d.note?'<div class="small">'+escH(d.note)+'</div>':'')+'</span><span>'+d.m+' min</span></div>';
+  });
+  h+='</div>';
+  if(r.unknown.length){h+='<div class="banner" style="margin-top:12px;">Not in your drill library (loaded as plain timers): '+escH(r.unknown.join(", "))+'</div>';}
+  r.warnings.forEach(function(w){h+='<div class="banner" style="margin-top:8px;">'+escH(w)+'</div>';});
+  h+='<button class="btn red" id="a_load" style="width:100%;margin-top:12px;">Load this practice</button><div class="small" style="margin-top:8px;">Loading resets the clocks and switches the TV to this plan.</div></div>';
+  out.innerHTML=h;
+  el("a_load").onclick=function(){
+   var b=el("a_load"),fresh=(S.idx===0&&elapsed(S.d)===0&&elapsed(S.t)===0);
+   if(!fresh&&!addArmed){addArmed=true;b.textContent="Tap again to replace the current practice";clearTimeout(addTimer);addTimer=setTimeout(function(){addArmed=false;var bb=el("a_load");if(bb){bb.textContent="Load this practice";}},4000);return;}
+   loadImported(addParsed);
+   out.innerHTML='<div class="card"><b>'+escH(addParsed.title)+' is loaded.</b><div class="muted" style="margin:6px 0 12px;">Open the controller to start.</div><a class="big" href="#ipad" style="margin:0 0 8px;">iPad controller</a><a class="big" href="#control" style="margin:0 0 8px;">Phone controller</a><a class="big" href="#display" style="margin:0;">TV display</a></div>';
+  };
+ };
+}
+function buildCode(){
+ document.documentElement.classList.remove("tvmode");document.body.classList.remove("tvmode");
+ el("root").innerHTML='<div class="wrap"><h1>Scoreboard code</h1><p class="muted" style="margin:0 0 14px;">Enter your scoreboard code. Every screen that uses the same code shows the same scoreboard.</p><input id="k_in" class="inp" style="text-transform:none;letter-spacing:0;height:48px;font-size:17px;" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="your code"><button class="btn red" id="k_go" style="width:100%;margin-top:10px;">Connect</button><p class="small" id="k_msg"></p></div>';
+ cur={update:function(){}};
+ el("k_go").onclick=function(){var v=el("k_in").value.trim();if(v.length<8||/[.#$\/\[\]\s]/.test(v)){el("k_msg").textContent="Use at least 8 letters or numbers, with no spaces or symbols.";return;}try{localStorage.setItem(CODE_KEY,v);}catch(e){}location.reload();};
+}
+function onStateSnap(snap){
+ loaded=true;
+ if(writing||dirty){snapIgnored++;return;}
+ snapTaken++;
+ S=snap.exists?normalize(snap.data()):defaultState(DEFAULT_PLAN);
+ applyPlan();
+ if(cur){cur.update();}
+}
+function startFirebase(code){
+ try{
+  firebase.initializeApp(FIREBASE_CONFIG);
+  var db=firebase.database();fbBase=db.ref("rooms/"+code);
+  var started=false,timeout=setTimeout(function(){if(!loaded){setStatus("Can\u2019t reach the scoreboard server yet. The screens may be out of date.");}},10000);
+  db.ref(".info/connected").on("value",function(s){if(s.val()===true){if(loaded){setStatus("");}}else if(loaded){setStatus("Offline. Trying to reconnect\u2026");}});
+  ref={
+   set:function(o){return Promise.race([fbBase.child("state").set(JSON.stringify(o)),new Promise(function(r){setTimeout(r,6000);})]);},
+   onSnapshot:function(cb,err){fbBase.child("state").on("value",function(s){var v=s.val(),d=null;if(typeof v==="string"){try{d=JSON.parse(v);}catch(e){d=null;}}cb({exists:!!d,data:function(){return d;}});},err);}
+  };
+  function startState(){
+   if(started){return;}started=true;clearTimeout(timeout);dbOK=true;
+   ref.onSnapshot(function(snap){if(!loaded){setStatus("");}onStateSnap(snap);},function(){setStatus("Lost the connection to the scoreboard server. Reload this page.");});
+  }
+  fbBase.child("plans").on("value",function(s){
+   var m={};s.forEach(function(c){var v=c.val();if(typeof v==="string"){try{m[c.key]=JSON.parse(v);}catch(e){}}});
+   mergePlans(m);startState();
+  },function(){clearTimeout(timeout);setStatus("The scoreboard server refused the connection. Check the code and the Firebase rules.");});
+ }catch(e){setStatus("Couldn\u2019t start the scoreboard server connection.");}
+}
+function startLocal(){
+ loaded=true;dbOK=true;
+ function readPlans(){try{return JSON.parse(localStorage.getItem(LOCAL_PLANS)||"{}");}catch(e){return {};}}
+ function emit(){var d=null;try{var v=localStorage.getItem(LOCAL_STATE);d=v?JSON.parse(v):null;}catch(e){d=null;}onStateSnap({exists:!!d,data:function(){return d;}});}
+ mergePlans(readPlans());
+ ref={set:function(o){try{localStorage.setItem(LOCAL_STATE,JSON.stringify(o));}catch(e){}return Promise.resolve();},onSnapshot:function(){}};
+ emit();
+ window.addEventListener("storage",function(e){if(e.key===LOCAL_STATE){emit();}else if(e.key===LOCAL_PLANS){mergePlans(readPlans());}});
+}
+function bootApp(){
+ try{var q=new URLSearchParams(location.search).get("code");if(q){localStorage.setItem(CODE_KEY,q.trim());history.replaceState(null,"",location.pathname+location.hash);}}catch(e){}
+ if(fbReady()&&!getCode()){buildCode();return;}
+ route();
+ if(fbReady()){startFirebase(getCode());}else{startLocal();}
+}
+
+var myId=Math.random().toString(36).slice(2,6),snapTaken=0,snapIgnored=0;
+var DR=PLANS[DEFAULT_PLAN].drills,START=PLANS[DEFAULT_PLAN].start,PLAN=PLANS[DEFAULT_PLAN].total;
+var S,cur=null,ref=null,dbOK=false,loaded=false,canWrite=true,dirty=false,writing=false,statusMsg="";
+var audio=null,soundOn=false,lastRem=null,lastKey="";
+function defaultSb(){return {on:false,red:0,black:0,rf:0,bf:0,rn:"RED",bn:"BLACK",q:1,len:240,c:{acc:0,st:null},h:[],sit:null,shot:{on:false,len:35,c:{acc:0,st:null}}};}
+function applyPlan(){var P=PLANS[S.plan];DR=P.drills;START=P.start;PLAN=P.total;}
+
+function defaultState(pid){
+ pid=PLANS[pid]?pid:DEFAULT_PLAN;
+ var D=PLANS[pid].drills;
+ return {plan:pid,idx:0,ps:D.map(function(d){return d.m*60;}),pre:D.map(function(d){return d.pre?d.pre.slice():[];}),tvl:D.map(function(d){return d.tv||0;}),clk:D.map(function(d){return d.clk;}),nt:D.map(function(d){return (!!d.note||!!d.list)&&d.nt!==false;}),ver:2,complete:false,sb:defaultSb(),d:{acc:0,st:null},t:{acc:0,st:null},resets:0,best:0};
+}
+function fixClock(c){
+ var a=(c&&typeof c.acc==="number"&&isFinite(c.acc)&&c.acc>=0)?c.acc:0;
+ var t=(c&&typeof c.st==="number"&&isFinite(c.st)&&c.st>0)?c.st:null;
+ return {acc:a,st:t};
+}
+function fixNum(v,lo,hi,dflt){return (typeof v==="number"&&isFinite(v)&&v>=lo&&v<=hi)?v:dflt;}
+function normalize(x){
+ try{x=JSON.parse(JSON.stringify(x));}catch(err){}
+ var pid=(x&&PLANS[x.plan])?x.plan:null;
+ if(!pid){return defaultState(DEFAULT_PLAN);}
+ if(x.ver!==2){return defaultState(pid);}
+ var n=PLANS[pid].drills.length,b=defaultState(pid);
+ var psArr=(Array.isArray(x.ps)&&x.ps.length===n)?x.ps:((Array.isArray(x.mins)&&x.mins.length===n)?x.mins.map(function(m){return Math.round(m*60);}):null);
+ if(!psArr||!Array.isArray(x.tvl)||x.tvl.length!==n||!Array.isArray(x.clk)||x.clk.length!==n){return b;}
+ b.idx=Math.min(Math.max(0,x.idx|0),n-1);
+ b.ps=psArr;b.tvl=x.tvl;b.clk=x.clk;
+ if(Array.isArray(x.pre)&&x.pre.length===n){b.pre=x.pre;}
+ if(Array.isArray(x.nt)&&x.nt.length===n){b.nt=x.nt;}
+ b.d=x.d&&typeof x.d==="object"?x.d:b.d;
+ b.t=x.t&&typeof x.t==="object"?x.t:b.t;
+ b.resets=x.resets|0;b.best=x.best|0;
+ var sb=Object.assign(defaultSb(),(x.sb&&typeof x.sb==="object")?x.sb:{});
+ if(!sb.c||typeof sb.c!=="object"){sb.c={acc:0,st:null};}
+ if(!Array.isArray(sb.h)){sb.h=[];}
+ if(!sb.shot||typeof sb.shot!=="object"||!sb.shot.c||typeof sb.shot.c!=="object"){sb.shot=defaultSb().shot;}
+ sb.c=fixClock(sb.c);
+ sb.len=fixNum(sb.len,1,7200,240);
+ sb.q=fixNum(sb.q,1,8,1);
+ sb.red=fixNum(sb.red,0,999,0);sb.black=fixNum(sb.black,0,999,0);
+ sb.shot.c=fixClock(sb.shot.c);
+ sb.shot.len=fixNum(sb.shot.len,1,99,35);
+ sb.shot.on=sb.shot.on===true;
+ sb.rf=Math.floor(fixNum(sb.rf,0,999,0));sb.bf=Math.floor(fixNum(sb.bf,0,999,0));b.complete=x.complete===true;b.sb=sb;
+ b.d=fixClock(b.d);b.t=fixClock(b.t);
+ if(Array.isArray(x.log)){b.log=x.log.slice(-14).map(function(z){return String(z).slice(0,160);});}
+ if(x.meta&&typeof x.meta==="object"){b.meta={id:String(x.meta.id||"").slice(0,8),b:String(x.meta.b||"").slice(0,16),t:+x.meta.t||0};}
+ return b;
+}
+function el(id){return document.getElementById(id);}
+function pad(n){return n<10?"0"+n:""+n;}
+function mmss(n){n=Math.max(0,n|0);return Math.floor(n/60)+":"+pad(n%60);}
+function fmtSigned(rem){
+ if(rem>0){return mmss(Math.ceil(rem));}
+ var o=Math.floor(-rem);
+ return (o>0?"+":"")+mmss(o);
+}
+function clockTime(mins){var h=Math.floor(mins/60),m=mins%60;return (h%12||12)+":"+pad(m);}
+function elapsed(o){return o.acc+(o.st?(Date.now()-o.st)/1000:0);}
+function drillRemain(){return S.ps[S.idx]-elapsed(S.d);}
+function tvRemain(){return S.tvl[S.idx]-elapsed(S.t);}
+
+S=defaultState(DEFAULT_PLAN);applyPlan();
+function flush(){
+ if(writing||!ref){return;}
+ writing=true;
+ (async function(){
+  try{
+   while(dirty){
+    dirty=false;
+    S.meta={id:myId,b:BUILD,t:Date.now()};
+    await ref.set(JSON.parse(JSON.stringify(S)));
+   }
+  }catch(e){
+   setStatus("Couldn\u2019t save that change. Check your connection.");
+  }
+  writing=false;
+ })();
+}
+function dlog(msg){if(!S.log){S.log=[];}S.log.push((Date.now()%1000000)+" "+msg);if(S.log.length>14){S.log.shift();}}
+function mutate(fn){
+ if(!canWrite){dlog("blocked: view only");if(cur){cur.update();}return;}
+ try{fn(S);}catch(err){dlog("ERROR "+(err&&err.message));}
+ applyPlan();
+ if(cur){cur.update();}
+ if(ref){dirty=true;flush();}
+}
+function flash(m){setStatus(m);setTimeout(function(){if(statusMsg===m){setStatus("");}},4000);}
+function setStatus(m){
+ statusMsg=m;
+ var e=el("status");
+ if(e){e.textContent=m;e.style.display=m?"block":"none";}
+ var e2=el("status2");if(e2){e2.textContent=m;}
+}
+
+function go(dir){mutate(function(s){var n=s.idx+dir;if(n<0){return;}if(n>=DR.length){s.complete=true;s.d={acc:elapsed(s.d),st:null};s.t={acc:elapsed(s.t),st:null};return;}s.complete=false;s.idx=n;s.d={acc:0,st:null};s.t={acc:0,st:null};s.resets=0;s.best=0;});}
+function toggleDrill(){if(S.complete){return;}mutate(function(s){if(s.d.st){s.d={acc:elapsed(s.d),st:null};}else{s.d={acc:s.d.acc,st:Date.now()};}});}
+function resetDrill(){mutate(function(s){s.d={acc:0,st:null};});}
+function toggleTv(){if(S.complete){return;}mutate(function(s){
+ var live=s.t.st&&(s.tvl[s.idx]-elapsed(s.t))>0;
+ if(live){s.t={acc:elapsed(s.t),st:null};}
+ else if(s.tvl[s.idx]-elapsed(s.t)<=0){
+  s.t={acc:Math.max(s.t.acc,s.tvl[s.idx]),st:null};
+  flash("TV timer is at zero. Tap Reset or pick a preset first.");
+ }
+ else{s.t={acc:s.t.acc,st:Date.now()};}
+});}
+function resetTv(){mutate(function(s){
+ var i=s.idx;
+ if(DR[i].pd){
+  var ran=Math.min(elapsed(s.t),s.tvl[i]);
+  var complete=ran>=s.tvl[i]-0.01;
+  if(complete){s.resets=0;s.best=0;}
+  else if(ran>0.5){s.resets+=1;s.best=Math.max(s.best,Math.round(ran));}
+ }
+ s.t={acc:0,st:null};
+});}
+function parseTime(t){
+ t=String(t).replace(/\s+/g,"");
+ if(!t){return null;}
+ var m=t.match(/^(\d{1,3}):(\d{1,2})$/);
+ if(m){var ss=parseInt(m[2],10);if(ss>59){return null;}return parseInt(m[1],10)*60+ss;}
+ if(/^\d{1,5}$/.test(t)){return parseInt(t,10);}
+ return null;
+}
+function fmtPlan(sec){return sec%60===0?(sec/60)+"m":mmss(sec);}
+function adjPs(ds){mutate(function(s){s.ps[s.idx]=Math.max(5,Math.min(36000,s.ps[s.idx]+ds));});}
+function setPs(sec){mutate(function(s){if(sec===null||sec<5){return;}s.ps[s.idx]=Math.min(sec,36000);});}
+function setTvl(sec){mutate(function(s){if(s.tvl[s.idx]<=0||sec===null||sec<1){return;}s.tvl[s.idx]=Math.min(sec,3600);});}
+function setSbLen(sec){mutate(function(s){if(sec===null||sec<5){return;}s.sb.len=Math.min(sec,3600);});}
+function loadPreset(v){mutate(function(s){s.tvl[s.idx]=v;s.t={acc:0,st:null};});}
+function setPresets(text){
+ var list=String(text).split(/[,\s]+/).map(parseTime).filter(function(v){return v!==null&&v>0;}).slice(0,8);
+ mutate(function(s){s.pre[s.idx]=list;});
+}
+function wireTime(inp,getCur,setFn,min){
+ inp.onchange=function(){var v=parseTime(inp.value);if(v===null||v<min){inp.value=mmss(getCur());}else{setFn(v);}};
+ inp.onkeydown=function(e){if(e.key==="Enter"){inp.blur();}};
+ inp.onfocus=function(){inp.select();};
+}
+function setIn(inp,val){if(document.activeElement!==inp&&inp.value!==val){inp.value=val;}}
+function adjTvl(dl){mutate(function(s){if(s.tvl[s.idx]>0){s.tvl[s.idx]=Math.max(1,s.tvl[s.idx]+dl);}});}
+function toggleSep(){mutate(function(s){if(DR[s.idx].pd){return;}s.tvl[s.idx]=s.tvl[s.idx]>0?0:60;s.t={acc:0,st:null};});}
+function toggleNt(){mutate(function(s){s.nt[s.idx]=!s.nt[s.idx];});}
+function noteLines(t){
+ if(t.indexOf(" / ")>-1){return t.split(" / ");}
+ return t.replace(/\.\s+(?=\d\.\s)/g,".\n").split("\n");
+}
+function tvLines(d){
+ if(d.list){return d.list.map(function(t,k){return (k+1)+". "+t;});}
+ return d.note?noteLines(d.note):[];
+}
+function toggleClk(){mutate(function(s){s.clk[s.idx]=!s.clk[s.idx];});}
+function setLeft(which,secs){mutate(function(s){
+ var i=s.idx;
+ if(which==="d"){var runningD=!!s.d.st;s.d={acc:s.ps[i]-secs,st:runningD?Date.now():null};}
+ else if(s.tvl[i]>0){var runningT=!!s.t.st;s.t={acc:s.tvl[i]-secs,st:runningT?Date.now():null};}
+});}
+function sbRemain(){return S.sb.len-elapsed(S.sb.c);}
+function shotElapsed(sb){
+ var sh=sb.shot,e=elapsed(sh.c);
+ if(sh.c.st&&sb.c.st){
+  var endAt=sb.c.st+(sb.len-sb.c.acc)*1000;
+  if(sh.c.st<endAt&&Date.now()>endAt){e=sh.c.acc+(endAt-sh.c.st)/1000;}
+ }
+ return e;
+}
+function shotFrozen(sb){return !!sb.shot.c.st&&shotElapsed(sb)<elapsed(sb.shot.c)-0.001;}
+function gameLive(sb){return !!sb.c.st&&(sb.len-elapsed(sb.c))>0;}
+function sbClockStr(rem){
+ if(rem>=60){return mmss(Math.ceil(rem));}
+ var r=Math.max(0,rem);return (Math.floor(r*10)/10).toFixed(1);
+}
+function sbToggleView(){mutate(function(s){s.sb.on=!s.sb.on;});}
+function sbScore(team,pts){mutate(function(s){s.sb.h.push({kind:"score",team:team,before:s.sb[team],shot:{acc:shotElapsed(s.sb),st:s.sb.shot.c.st?Date.now():null}});s.sb[team]=Math.min(999,Math.max(0,s.sb[team]+pts));if(s.sb.h.length>60){s.sb.h.shift();}if(s.sb.shot.on){s.sb.shot.c={acc:0,st:gameLive(s.sb)?Date.now():null};}});}
+function sbUndo(){mutate(function(s){var h=s.sb.h.pop();if(!h){return;}if(typeof h==="object"){if(h.kind==="foul"){s.sb[h.team]=h.before;}else if(h.kind==="foulreset"){s.sb.rf=h.rf;s.sb.bf=h.bf;}else{s.sb[h.team]=h.before;s.sb.shot.c=fixClock(h.shot);}return;}var p=h.split(":");s.sb[p[0]]=Math.max(0,s.sb[p[0]]-parseInt(p[1],10));});}
+function sbFoul(team,change){mutate(function(s){var before=s.sb[team]||0,next=Math.min(999,Math.max(0,before+change));if(next===before){return;}s.sb.h.push({kind:"foul",team:team,before:before});s.sb.h=s.sb.h.slice(-60);s.sb[team]=next;});}
+function resetFouls(){if(!confirm("Reset both teams’ foul totals to zero?")){return;}mutate(function(s){s.sb.h.push({kind:"foulreset",rf:s.sb.rf,bf:s.sb.bf});s.sb.h=s.sb.h.slice(-60);s.sb.rf=0;s.sb.bf=0;});}
+function sbClock(){mutate(function(s){
+ var c=s.sb.c,sh=s.sb.shot;
+ var se=shotElapsed(s.sb);
+ var shLive=sh.c.st&&!shotFrozen(s.sb)&&(sh.len-se)>0;
+ dlog("GAME tap: gameLive="+gameLive(s.sb)+" shotOn="+sh.on+" shotRunning="+!!sh.c.st+" shLive="+!!shLive+" used="+se.toFixed(2));
+ if(gameLive(s.sb)){
+  s.sb.c={acc:elapsed(c),st:null};
+  if(sh.c.st){sh.c={acc:se,st:null};}
+ }else{
+  if(s.sb.len-elapsed(c)<=0){
+   s.sb.c={acc:Math.max(c.acc,s.sb.len),st:null};
+   flash("Game clock is at 0:00. Tap Reset or Next quarter first.");
+   return;
+  }
+  s.sb.c={acc:c.acc,st:Date.now()};
+  if(sh.on&&!shLive){
+   sh.c=(sh.len-se<=0)?{acc:0,st:Date.now()}:{acc:se,st:Date.now()};
+  }
+  dlog("  game started; shot "+(sh.c.st?"RUNNING":"stopped"));
+ }
+});}
+function sbShotToggle(){mutate(function(s){
+ var sh=s.sb.shot,se=shotElapsed(s.sb);
+ var live=sh.c.st&&!shotFrozen(s.sb)&&(sh.len-se)>0;
+ dlog("SHOT tap: running="+!!sh.c.st+" live="+!!live+" frozen="+shotFrozen(s.sb)+" used="+se.toFixed(2)+" len="+sh.len);
+ if(live){sh.c={acc:se,st:null};}
+ else if(sh.len-se<=0){sh.c={acc:0,st:Date.now()};}
+ else{sh.c={acc:se,st:Date.now()};}
+ dlog("  shot now "+(sh.c.st?"RUNNING":"stopped")+" acc="+sh.c.acc.toFixed(2));
+});}
+function sbShotReset(){mutate(function(s){var sh=s.sb.shot;sh.c={acc:0,st:gameLive(s.sb)?Date.now():null};});}
+function sbShotShow(){mutate(function(s){
+ var sh=s.sb.shot;
+ sh.on=!sh.on;
+ sh.c={acc:0,st:(sh.on&&gameLive(s.sb))?Date.now():null};
+});}
+function setShotLen(sec){mutate(function(s){if(sec===null||sec<5){return;}s.sb.shot.len=Math.min(99,sec);});}
+function adjShot(ds){mutate(function(s){s.sb.shot.len=Math.max(5,Math.min(99,s.sb.shot.len+ds));});}
+function shotTest(){mutate(function(s){var sh=s.sb.shot,run=!!sh.c.st;sh.c={acc:sh.len-5,st:run?Date.now():null};});}
+function sbClockReset(){mutate(function(s){s.sb.c={acc:0,st:null};s.sb.shot.c={acc:0,st:null};});}
+function sbLen(ds){mutate(function(s){s.sb.len=Math.min(3600,Math.max(5,s.sb.len+ds));});}
+function sbQ(dq){mutate(function(s){s.sb.q=Math.min(8,Math.max(1,s.sb.q+dq));});}
+function sbNextQ(){mutate(function(s){s.sb.q=Math.min(8,s.sb.q+1);s.sb.c={acc:0,st:null};s.sb.shot.c={acc:0,st:null};});}
+function sbName(key,val){mutate(function(s){var v=String(val).replace(/^\s+|\s+$/g,"").slice(0,12);s.sb[key]=v||(key==="rn"?"RED":"BLACK");});}
+function sbTestZero(){mutate(function(s){var run=!!s.sb.c.st;s.sb.c={acc:s.sb.len-5,st:run?Date.now():null};});}
+var SIT=[
+ [1,"B","B",63,60,47,1,"MC","B"],[2,"W","W",75,74,25,1,"MC","W"],[3,"B","W",74,72,15,1,"BC","B"],
+ [4,"W","B",80,73,110,3,"FT","W"],[5,"B","B",66,60,97,3,"BC","B"],[6,"W","T",67,67,32,1,"FC","W"],
+ [7,"B","W",58,54,39,1,"FT","B"],[8,"W","B",76,75,1,0,"FC","W"],[9,"B","B",64,62,22,3,"BC","B"],
+ [10,"W","W",70,62,147,1,"FC","W"],[11,"B","W",50,47,50,0,"MC","B"],[12,"W","B",67,63,40,0,"BC","W"],
+ [13,"B","T",71,71,30,2,"FC","B"],[14,"W","W",71,65,106,3,"FT","W"],[15,"B","W",72,66,140,3,"FT","B"],
+ [16,"W","B",82,77,100,3,"BC","W"],[17,"B","B",60,52,132,1,"FT","B"],[18,"W","W",70,69,5,1,"FC","W"],
+ [19,"B","W",72,70,7,1,"MC","B"],[20,"W","B",69,68,2,1,"HC","W"],[21,"B","W",75,74,3,1,"MC","B"],
+ [22,"W","W",77,74,15,1,"BC","W"],[23,"B","B",70,67,18,1,"FC","B"],[24,"W","B",80,78,10,1,"FT","W"],
+ [25,"J","T",70,70,300,2,"JUMP","J",true]
+].map(function(a){return {n:a[0],ball:a[1],lead:a[2],hi:a[3],lo:a[4],secs:a[5],to:a[6],spot:a[7],arrow:a[8],ot:!!a[9]};});
+function sitName(c){return c==="B"?"Black":(c==="W"?"Red":(c==="T"?"Tied":"Jump ball"));}
+function sitScores(r){
+ if(r.lead==="T"){return {red:r.hi,black:r.hi};}
+ if(r.lead==="B"){return {black:r.hi,red:r.lo};}
+ return {red:r.hi,black:r.lo};
+}
+function sitTimeStr(r){return r.ot?"OT":(r.secs>=60?mmss(r.secs):":"+pad(r.secs));}
+function sitLabel(r){
+ var lead=r.lead==="T"?"Tied "+r.hi+"-"+r.lo:sitName(r.lead)+" up "+(r.hi-r.lo)+" ("+r.hi+"-"+r.lo+")";
+ return r.n+". "+lead+", "+sitTimeStr(r)+(r.ball==="J"?", jump ball":", "+sitName(r.ball)+" ball");
+}
+function sitSpot(c){var m={MC:"Mid-court",BC:"Back-court",FC:"Front-court",FT:"Free throw",HC:"Half court"};return m[c]||c;}
+function sitInfoText(r){
+ if(!r){return "";}
+ return "Situation "+r.n+": "+(r.ball==="J"?"jump ball":sitName(r.ball)+" ball, arrow "+sitName(r.arrow))+", "+r.to+" timeouts"+(r.spot==="JUMP"?"":", ball at "+sitSpot(r.spot).toLowerCase())+(r.ot?", overtime":"")+".";
+}
+function sitTvLines(r,rn,bn){
+ var team=function(c){return c==="B"?bn:(c==="W"?rn:"");};
+ return ["SITUATION "+r.n,
+  r.ball==="J"?"JUMP BALL":"BALL: "+team(r.ball)+"   ARROW: "+team(r.arrow),
+  "TIMEOUTS: "+r.to+(r.ot?"   OVERTIME":"")+(r.spot!=="JUMP"?"   BALL AT: "+sitSpot(r.spot).toUpperCase():"")];
+}
+function loadSit(n){
+ var r=SIT[n-1];if(!r){return;}
+ mutate(function(s){
+  var sc=sitScores(r);
+  s.sb.red=sc.red;s.sb.black=sc.black;
+  s.sb.len=r.secs;s.sb.c={acc:0,st:null};s.sb.shot.c={acc:0,st:null};s.sb.q=4;s.sb.h=[];s.sb.sit=n;s.sb.on=true;
+ });
+}
+function nextSit(){var cur=(S.sb.sit||0)+1;if(cur>SIT.length){cur=SIT.length;}loadSit(cur);}
+function clearSit(){mutate(function(s){s.sb.sit=null;s.sb.red=0;s.sb.black=0;s.sb.len=240;s.sb.c={acc:0,st:null};s.sb.h=[];});}
+var sbArmed=false,sbTimer=null;
+function sbClearScores(){
+ var b=el("c_sbclear");
+ if(!sbArmed){sbArmed=true;b.textContent="Tap again to clear scores";sbTimer=setTimeout(function(){sbArmed=false;b.textContent="Clear scores";},4000);return;}
+ clearTimeout(sbTimer);sbArmed=false;b.textContent="Clear scores";
+ mutate(function(s){s.sb.red=0;s.sb.black=0;s.sb.h=[];});
+}
+var resetArmed=false,resetTimer=null;
+function resetAll(){
+ var b=el("resetall");
+ if(!resetArmed){resetArmed=true;b.textContent="Tap again to reset the whole practice";resetTimer=setTimeout(function(){resetArmed=false;b.textContent="Reset practice to the plan";},4000);return;}
+ clearTimeout(resetTimer);resetArmed=false;b.textContent="Reset practice to the plan";
+ mutate(function(s){var n=defaultState(s.plan);for(var k in n){s[k]=n[k];}});
+}
+var planArmed=null,planTimer=null;
+function switchPlan(pid){
+ if(pid===S.plan){return;}
+ if(planArmed!==pid){planArmed=pid;clearTimeout(planTimer);planTimer=setTimeout(function(){planArmed=null;if(cur){cur.update();}},4000);if(cur){cur.update();}return;}
+ planArmed=null;clearTimeout(planTimer);
+ mutate(function(s){var n=defaultState(pid);for(var k in n){s[k]=n[k];}});
+}
+
+function buildHome(){
+ document.documentElement.classList.remove("tvmode");document.body.classList.remove("tvmode");
+ var online=fbReady()&&!!getCode();
+ el("root").innerHTML='<div class="wrap"><h1>Courtside practice scoreboard</h1><p class="muted" style="margin:0 0 16px;">Open the TV display on the laptop and the controller on the iPad or phone, then tap Next drill.</p>'+
+ '<a class="big" href="#add">Add today\u2019s practice<span>Paste the plan from your planner</span></a>'+
+ '<a class="big" href="#display">TV display<span>Open this on the laptop</span></a>'+
+ '<a class="big" href="#ipad">iPad controller<span>Open this on the iPad</span></a>'+
+ '<a class="big" href="#control">Phone controller<span>Open this on the phone</span></a>'+
+ '<p class="small">'+(online?'Connected. Screens with the same code stay in sync.':(fbReady()?'':'Local mode: this browser only. Screens in the same browser stay in sync. Add the Firebase settings to link other devices.'))+' <span id="status"></span></p>'+
+ (online?'<p class="small"><a href="#" id="h_chg" style="color:#fff;">Change scoreboard code</a></p>':'')+'</div>';
+ var c=el("h_chg");if(c){c.onclick=function(e){e.preventDefault();try{localStorage.removeItem(CODE_KEY);}catch(x){}location.reload();};}
+ cur={update:function(){}};
+ setStatus(statusMsg);
+}
+
+var SEG={0:"abcdef",1:"bc",2:"abdeg",3:"abcdg",4:"bcfg",5:"acdfg",6:"acdefg",7:"abc",8:"abcdefg",9:"abcdfg"};
+var LON="#ffffff",LOFF="#1a1a1a";
+function ledDigit(x,y,w,h,t,ch,on,off){
+ var sg=(ch===null||ch===undefined)?"":(SEG[ch]||"");
+ var hx=t*0.6,vh=(h-3*t)/2;
+ var P={
+  a:[[x+hx+1,y],[x+w-hx-1,y],[x+w-hx-1-t*0.7,y+t],[x+hx+1+t*0.7,y+t]],
+  g:[[x+hx+1+t*0.7,y+vh+t],[x+w-hx-1-t*0.7,y+vh+t],[x+w-hx-1,y+vh+t*1.5],[x+w-hx-1-t*0.7,y+vh+t*2],[x+hx+1+t*0.7,y+vh+t*2],[x+hx+1,y+vh+t*1.5]],
+  d:[[x+hx+1+t*0.7,y+h-t],[x+w-hx-1-t*0.7,y+h-t],[x+w-hx-1,y+h],[x+hx+1,y+h]],
+  f:[[x,y+hx],[x+t,y+t*0.9+1],[x+t,y+vh+t-1],[x+t*0.5,y+vh+t*1.5],[x,y+vh+t*1.2]],
+  b:[[x+w,y+hx],[x+w-t,y+t*0.9+1],[x+w-t,y+vh+t-1],[x+w-t*0.5,y+vh+t*1.5],[x+w,y+vh+t*1.2]],
+  e:[[x,y+vh+t*1.8],[x+t*0.5,y+vh+t*1.8],[x+t,y+vh+t*2+1],[x+t,y+h-t*0.9-1],[x,y+h-hx]],
+  c:[[x+w,y+vh+t*1.8],[x+w-t*0.5,y+vh+t*1.8],[x+w-t,y+vh+t*2+1],[x+w-t,y+h-t*0.9-1],[x+w,y+h-hx]]
+ };
+ var o="";
+ "abcdefg".split("").forEach(function(k){
+  var pts=P[k].map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join(" ");
+  o+='<polygon points="'+pts+'" fill="'+(sg.indexOf(k)>-1?on:off)+'"/>';
+ });
+ return o;
+}
+function ledScore(n){
+ var str=String(Math.min(999,Math.max(0,n))),len=str.length,p=Math.max(2,len);
+ var w=p===3?38:60,t=p===3?8:12,gap=p===3?8:10;
+ var total=p*w+(p-1)*gap,x0=(150-total)/2,o="";
+ for(var i=0;i<p;i++){var k=i-(p-len);o+=ledDigit(x0+i*(w+gap),8,w,104,t,k>=0?str.charAt(k):null,LON,LOFF);}
+ return o;
+}
+function ledClock(str){
+ var W=66,H=116,T=14,G=10,SW=22,items=[],total=0,i,c;
+ for(i=0;i<str.length;i++){c=str.charAt(i);var sep=(c===":"||c===".");items.push({c:c,w:sep?SW:W});total+=sep?SW:W;}
+ total+=(items.length-1)*G;
+ var sc=total>250?250/total:1,x=(260-total*sc)/2/sc,o="";
+ items.forEach(function(it){
+  if(it.c===":"){o+='<rect x="'+(x+5.5)+'" y="38" width="11" height="11" fill="'+LON+'"/><rect x="'+(x+5.5)+'" y="80" width="11" height="11" fill="'+LON+'"/>';}
+  else if(it.c==="."){o+='<rect x="'+(x+5.5)+'" y="'+(7+H-11)+'" width="11" height="11" fill="'+LON+'"/>';}
+  else{o+=ledDigit(x,7,W,H,T,it.c,LON,LOFF);}
+  x+=it.w+G;
+ });
+ return '<g transform="scale('+sc+')">'+o+'</g>';
+}
+function fitTo(inner,outer){
+ inner.style.transform="none";
+ var ah=outer.clientHeight,aw=outer.clientWidth,ih=inner.offsetHeight,iw=inner.scrollWidth,k=1;
+ if(ah>0&&ih>ah){k=Math.min(k,ah/ih);}
+ if(aw>0&&iw>aw){k=Math.min(k,aw/iw);}
+ if(k<1){k=Math.max(0.3,k*0.96);inner.style.transform="scale("+k+")";}
+ return k;
+}
+function toggleSound(){
+ if(!audio){var AC=window.AudioContext||window.webkitAudioContext;if(AC){audio=new AC();}}
+ if(audio&&audio.state==="suspended"){audio.resume();}
+ soundOn=!soundOn;
+ var t=soundOn?"Sound on":"Sound off";
+ if(dsp.snd){dsp.snd.textContent=t;}
+ if(dsp.snd2){dsp.snd2.textContent=t;}
+}
+function ledShot(n){
+ var str=String(Math.min(99,Math.max(0,n)));
+ var tens=str.length>1?str.charAt(0):null,ones=str.charAt(str.length-1);
+ return ledDigit(4,4,40,58,8,tens,LON,LOFF)+ledDigit(56,4,40,58,8,ones,LON,LOFF);
+}
+function sbUpdate(){
+ var b=S.sb,rem=sbRemain();var rf=el("s_rfsvg"),bf=el("s_bfsvg");if(rf&&dsp.rfk!==b.rf){dsp.rfk=b.rf;rf.innerHTML=ledScore(b.rf);}if(bf&&dsp.bfk!==b.bf){dsp.bfk=b.bf;bf.innerHTML=ledScore(b.bf);}
+ var rn=String(b.rn||"RED").toUpperCase(),bn=String(b.bn||"BLACK").toUpperCase();
+ if(dsp.rnT!==rn){dsp.rnT=rn;dsp.rn.textContent=rn;}
+ if(dsp.bnT!==bn){dsp.bnT=bn;dsp.bn.textContent=bn;}
+ var cs=sbClockStr(rem);
+ if(dsp.ck!==cs){dsp.ck=cs;dsp.csvg.innerHTML=ledClock(cs);}
+ if(dsp.rk!==b.red){dsp.rk=b.red;dsp.rsvg.innerHTML=ledScore(b.red);}
+ if(dsp.bk!==b.black){dsp.bk=b.black;dsp.bsvg.innerHTML=ledScore(b.black);}
+ if(dsp.qk!==b.q){dsp.qk=b.q;dsp.qsvg.innerHTML=ledDigit(2,4,26,42,5,String(b.q),LON,LOFF);}
+ var ik=(b.sit||0)+"|"+rn+"|"+bn;
+ if(dsp.ik!==ik){
+  dsp.ik=ik;dsp.info.innerHTML="";
+  if(b.sit&&SIT[b.sit-1]){
+   sitTvLines(SIT[b.sit-1],rn,bn).forEach(function(t,ix){var dv=document.createElement("div");dv.textContent=t;if(ix===0){dv.style.color="#fff";dv.style.fontWeight="500";}dsp.info.appendChild(dv);});
+  }
+ }
+ var sh=b.shot,shE=shotElapsed(b),shRem=sh.len-shE,shN=Math.max(0,Math.ceil(shRem));
+ dsp.sgrp.style.display=sh.on?"flex":"none";
+ if(sh.on){
+  if(dsp.shk!==shN){dsp.shk=shN;dsp.ssvg.innerHTML=ledShot(shN);}
+  dsp.sbox.classList.toggle("blink",shRem<=0&&shE>0.05);
+  if(dsp.lastSh!==null&&dsp.lastSh>0&&shRem<=0&&rem>0){beep();}
+  dsp.lastSh=shRem;
+ }else{dsp.lastSh=null;}
+ dsp.dbg.textContent=BUILD+" | clock "+new Date().toTimeString().slice(0,8);
+ var zero=rem<=0&&elapsed(b.c)>0.05;
+ dsp.cbox.classList.toggle("blink",zero);
+ if(dsp.lastSb!==null&&dsp.lastSb>0&&rem<=0){beep();}
+ dsp.lastSb=rem;
+ var sk=window.innerWidth+"x"+window.innerHeight+"|"+(b.sit||0)+"|"+(b.shot.on?1:0);
+ if(dsp.sbFitKey!==sk){dsp.sbFitKey=sk;fitTo(dsp.sgrid,dsp.smain);}
+}
+var dsp={};
+function buildDisplay(){
+ document.documentElement.classList.add("tvmode");document.body.classList.add("tvmode");
+ el("root").innerHTML='<div class="tv" id="d_tv" style="position:relative;">'+
+ '<div class="top"><div id="d_title"></div><div id="d_count"></div></div>'+
+ '<div class="mid" id="d_mid"><div class="fit" id="d_fit"><div class="name" id="d_name"></div>'+
+ '<div id="d_cw"><div class="lbl" id="d_lbl">TIME</div><div class="clock" id="d_clock"></div></div>'+
+ '<div class="extra" id="d_extra"></div><div class="note" id="d_note"></div></div></div>'+
+ '<div class="foot"><div class="upnext">UP NEXT: <b id="d_next"></b></div><div class="motto">WIN THE MOMENT</div><div class="motto">TOGETHER. WE BELIEVE.</div></div>'+
+ '<button class="snd" id="d_snd">Sound off</button><div class="st" id="status"></div></div>'+
+ '<div class="sbv" id="d_sb" style="display:none;position:relative;"><div class="sbmain" id="s_main"><div class="sbgrid" id="s_grid">'+
+ '<div><div class="tn" id="s_rn"></div><div class="bar" style="background:#d7261e;"></div><div class="box"><svg id="s_rsvg" viewBox="0 0 150 120" role="img" aria-label="Red score"></svg></div><div class="foullabel">TEAM FOULS</div><svg id="s_rfsvg" class="foulsvg" viewBox="0 0 150 120" role="img" aria-label="Red team fouls"></svg></div>'+
+ '<div><div class="gl">GAME CLOCK</div><div class="box" id="s_cbox"><svg id="s_csvg" viewBox="0 0 260 130" role="img" aria-label="Game clock"></svg></div>'+
+ '<div class="sbq"><div class="sbg"><span>QUARTER</span><div class="box"><svg id="s_qsvg" viewBox="0 0 30 50" role="img" aria-label="Quarter"></svg></div></div>'+
+ '<div class="sbg" id="s_sgrp"><span>SHOT CLOCK</span><div class="box" id="s_sbox" style="width:11vw;min-width:84px;"><svg id="s_ssvg" viewBox="0 0 100 66" role="img" aria-label="Shot clock"></svg></div></div></div><div class="sbinfo" id="s_info"></div></div>'+
+ '<div><div class="tn" id="s_bn"></div><div class="bar" style="background:#ffffff;"></div><div class="box"><svg id="s_bsvg" viewBox="0 0 150 120" role="img" aria-label="Black score"></svg></div><div class="foullabel">TEAM FOULS</div><svg id="s_bfsvg" class="foulsvg" viewBox="0 0 150 120" role="img" aria-label="Black team fouls"></svg></div>'+
+ '</div></div><div class="sbfoot"><span>WIN THE MOMENT</span><span>TOGETHER. WE BELIEVE.</span></div><button class="snd" id="s_snd">Sound off</button><div class="st" id="status2"></div><div id="s_dbg" style="position:absolute;left:50%;bottom:10px;transform:translateX(-50%);color:#444;font-size:12px;font-family:ui-monospace,Menlo,monospace;"></div></div>';
+ dsp={tv:el("d_tv"),note:el("d_note"),noteSig:null,title:el("d_title"),count:el("d_count"),name:el("d_name"),cw:el("d_cw"),lbl:el("d_lbl"),clock:el("d_clock"),extra:el("d_extra"),next:el("d_next"),snd:el("d_snd"),sig:null,sb:el("d_sb"),fit:el("d_fit"),mid:el("d_mid"),sgrid:el("s_grid"),smain:el("s_main"),fitKey:null,sbFitKey:null,rn:el("s_rn"),bn:el("s_bn"),rsvg:el("s_rsvg"),bsvg:el("s_bsvg"),csvg:el("s_csvg"),qsvg:el("s_qsvg"),cbox:el("s_cbox"),snd2:el("s_snd"),info:el("s_info"),ik:null,lastSb:null,sgrp:el("s_sgrp"),sbox:el("s_sbox"),ssvg:el("s_ssvg"),shk:null,lastSh:null,dbg:el("s_dbg")};
+ dsp.snd.onclick=toggleSound;dsp.snd2.onclick=toggleSound;
+ cur={update:dispUpdate};
+ setStatus(statusMsg);
+ dispUpdate();
+}
+function beep(){
+ if(!soundOn||!audio){return;}
+ var o=audio.createOscillator(),g=audio.createGain();
+ o.type="square";o.frequency.value=440;g.gain.value=0.15;
+ o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+1.2);
+}
+function dispUpdate(){
+ var sbOn=!!S.sb.on;
+ dsp.tv.style.display=sbOn?"none":"flex";
+ dsp.sb.style.display=sbOn?"flex":"none";
+ if(sbOn){dsp.fitKey=null;sbUpdate();return;}
+ dsp.lastSb=null;dsp.sbFitKey=null;
+ var i=S.idx,d=DR[i],hasTv=S.tvl[i]>0;
+ dsp.title.textContent=PLANS[S.plan].title.toUpperCase();
+ dsp.count.textContent="DRILL "+(i+1)+" OF "+DR.length;
+ dsp.name.textContent=S.complete?"Practice complete":d.n;
+ dsp.cw.style.visibility=S.clk[i]?"visible":"hidden";
+ dsp.lbl.textContent=hasTv?"TIMER":"TIME";
+ var rem,red;
+ if(hasTv){rem=tvRemain();practiceDigits(mmss(Math.max(0,Math.ceil(rem))));red=rem<=0&&elapsed(S.t)>0;}
+ else{rem=drillRemain();practiceDigits(mmss(Math.ceil(Math.abs(rem))));if(rem<0){dsp.lbl.textContent="OVER TIME";};red=rem<0;}
+ dsp.clock.style.color=red?"#d7261e":"#fff";
+ var key=S.plan+"|"+i;
+ if(lastKey!==key){lastKey=key;lastRem=null;}
+ if(hasTv&&lastRem!==null&&lastRem>0&&rem<=0){beep();}
+ lastRem=hasTv?rem:null;
+ dsp.next.textContent=i<DR.length-1?DR[i+1].n:"Practice complete";
+ var sig="";
+ if(d.pd){
+  var done=hasTv&&rem<=0&&elapsed(S.t)>0;
+  sig=done?"c"+(S.resets+1):"r"+S.resets+"|"+S.best;
+  if(dsp.sig!==sig){
+   if(done){dsp.extra.innerHTML='<div><div class="v" style="color:#d7261e;letter-spacing:0.1em;font-family:inherit;">PERFECT DEFENSE</div><div class="k" style="margin-top:0.6vw;">'+(S.resets+1)+(S.resets===0?" TRY":" TRIES")+'</div></div>';}
+   else{dsp.extra.innerHTML='<div><div class="k">RESETS</div><div class="v" style="color:#d7261e;">'+S.resets+'</div></div><div><div class="k">BEST RUN</div><div class="v">'+mmss(S.best)+'</div></div>';}
+  }
+ }else if(dsp.sig!==sig){dsp.extra.innerHTML="";}
+ dsp.sig=sig;
+ var lines=(S.nt[i]&&(d.note||d.list))?tvLines(d):[];
+ var nkey=lines.join("|");
+ if(dsp.noteSig!==nkey){
+  dsp.noteSig=nkey;dsp.note.innerHTML="";
+  dsp.note.className="note"+(lines.length>5?" cols":"");
+  lines.forEach(function(t){var l=document.createElement("div");l.className="l";l.textContent=t;dsp.note.appendChild(l);});
+  dsp.tv.classList.toggle("withnote",lines.length>0);
+  dsp.tv.classList.toggle("withlist",lines.length>5);
+ }
+ var fk=i+"|"+nkey+"|"+sig+"|"+S.clk[i]+"|"+hasTv+"|"+window.innerWidth+"x"+window.innerHeight;
+ if(dsp.fitKey!==fk){dsp.fitKey=fk;fitTo(dsp.fit,dsp.mid);}
+}
+
+var u={};
+function controlHtml(){
+ return '<div class="wrap">'+
+ '<div class="row" style="margin-bottom:10px;"><h1 id="c_title">Practice controller</h1><span><a href="#ipad" class="small">iPad layout</a> &nbsp; <a href="#" class="small">Home</a></span></div>'+
+ '<div id="status" class="banner" style="display:none;"></div>'+
+'<div class="card" id="c_sbcard"><div class="row"><div><div style="font-weight:500;">Scoreboard view</div><div class="muted">Red vs Black on the TV</div></div><button class="btn red" id="c_sbtoggle" style="height:52px;"></button></div>'+
+ '<div id="c_sbpanel" style="display:none;margin-top:14px;">'+
+ '<div class="row"><div><div class="muted">Game clock</div><div class="clk" id="c_sbclock"></div></div><div style="display:flex;gap:8px;"><button class="btn" id="c_sbstart">Start</button><button class="btn" id="c_sbreset">Reset</button></div></div>'+
+ '<div id="c_shwrap">'+
+ '<div class="row" style="margin-top:14px;"><div><div class="muted">Shot clock</div><div class="clk" id="c_shclock"></div></div><div style="display:flex;gap:8px;"><button class="btn" id="c_shstart">Start</button><button class="btn" id="c_shreset">Reset</button></div></div>'+
+ '<div class="row" style="margin-top:10px;"><div class="muted">Shot clock length (sec)</div><div class="step"><button class="btn sq" id="c_shm" aria-label="Five seconds shorter">\u2212</button><input class="inp tin" id="c_shlen" inputmode="numeric" autocomplete="off" aria-label="Shot clock length in seconds"><button class="btn sq" id="c_shp" aria-label="Five seconds longer">+</button></div></div>'+
+ '</div>'+
+ '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;"><button class="btn sm" id="c_shshow"></button><span class="small" id="c_shhelp">Starts and pauses with the game clock. Resets by itself on a made basket, or tap Reset anytime.</span></div>'+
+ '<div class="small" id="c_dbg" style="margin-top:8px;font-family:ui-monospace,Menlo,monospace;word-break:break-word;"></div>'+
+ '<div class="row" style="margin-top:12px;"><div class="muted">Quarter</div><div class="step"><button class="btn sq" id="c_qm" aria-label="Previous quarter">\u2212</button><span class="val" id="c_qv"></span><button class="btn sq" id="c_qp" aria-label="Next quarter number">+</button></div></div>'+
+ '<div class="row" style="margin-top:10px;"><div class="muted">Quarter length</div><div class="step"><button class="btn sq" id="c_lm" aria-label="One minute shorter">\u2212</button><input class="inp tin" id="c_lv" inputmode="text" autocomplete="off" aria-label="Quarter length, minutes and seconds"><button class="btn sq" id="c_lp" aria-label="One minute longer">+</button></div></div>'+
+ '<button class="btn" id="c_nextq" style="width:100%;margin-top:12px;">Next quarter (resets clock)</button>'+
+ '<div id="c_sitwrap" style="display:none;border-top:0.5px solid var(--border);margin-top:14px;padding-top:14px;"><div class="muted" style="margin-bottom:6px;">Situations</div>'+
+ '<select class="inp" id="c_sitsel" style="text-transform:none;letter-spacing:0;height:48px;font-weight:400;" aria-label="Choose a situation"></select>'+
+ '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;"><button class="btn red" id="c_sitload" style="font-size:15px;">Load and show</button><button class="btn" id="c_sitnext">Next situation</button><button class="btn sm" id="c_sitclear">Clear</button></div>'+
+ '<div class="muted" id="c_sitinfo" style="margin-top:8px;"></div></div>'+
+ '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;">'+
+ '<div><input class="inp" id="c_rnin" maxlength="12" aria-label="Red team name"><div class="clk" id="c_rs" style="text-align:center;margin:8px 0;"></div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;"><button class="btn tmred" id="c_r1" style="padding:0;height:56px;">+1</button><button class="btn tmred" id="c_r2" style="padding:0;height:56px;">+2</button><button class="btn tmred" id="c_r3" style="padding:0;height:56px;">+3</button></div></div>'+
+ '<div><input class="inp" id="c_bnin" maxlength="12" aria-label="Black team name"><div class="clk" id="c_bs" style="text-align:center;margin:8px 0;"></div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;"><button class="btn tmblk" id="c_b1" style="padding:0;height:56px;">+1</button><button class="btn tmblk" id="c_b2" style="padding:0;height:56px;">+2</button><button class="btn tmblk" id="c_b3" style="padding:0;height:56px;">+3</button></div></div>'+
+ '</div>'+
+ '<div class="foulcontrols"><div>RED TEAM FOULS <b id="c_rf">0</b><button class="btn" id="c_rfplus">+ Foul</button><button class="btn" id="c_rfminus">− Foul</button></div><div>BLACK TEAM FOULS <b id="c_bf">0</b><button class="btn" id="c_bfplus">+ Foul</button><button class="btn" id="c_bfminus">− Foul</button></div><button class="btn" id="c_rfreset">Reset team fouls</button><div class="small">Fouls carry across quarters until reset by the manager.</div></div>'+
+ '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;"><button class="btn" id="c_sbundo">Undo last action</button><button class="btn sm" id="c_sbclear">Clear scores</button><button class="btn sm" id="c_sbtest">Test: 5 sec left</button><button class="btn sm" id="c_shtest">Test shot clock: 5 sec</button></div>'+
+ '</div></div>'+
+
+ '<div class="card"><div class="row" style="align-items:baseline;"><div class="muted" id="c_count"></div><div class="muted" id="c_start"></div></div>'+
+ '<div style="font-size:24px;font-weight:500;margin-top:2px;" id="c_name"></div>'+
+ '<div class="muted" id="c_mode" style="margin-top:2px;"></div>'+
+ '<div id="c_note" style="margin-top:8px;font-size:14px;"></div></div>'+
+ '<div class="card"><div class="row"><div><div class="muted">Drill time</div><div class="clk" id="c_dclock"></div></div>'+
+ '<div style="display:flex;gap:8px;"><button class="btn" id="c_dstart">Start</button><button class="btn" id="c_dreset" aria-label="Reset drill clock">Reset</button></div></div>'+
+ '<div class="small" style="margin-top:10px;">Type times as m:ss, or just seconds (22 means 0:22).</div><div class="row" style="margin-top:6px;"><div class="muted">Planned length</div><div class="step"><button class="btn sq" id="c_pm" aria-label="One minute shorter">\u2212</button><input class="inp tin" id="c_plen" inputmode="text" autocomplete="off" aria-label="Planned length, minutes and seconds"><button class="btn sq" id="c_pp" aria-label="One minute longer">+</button></div></div>'+
+ '<div id="c_tvcard" style="border-top:0.5px solid var(--border);margin-top:14px;padding-top:14px;">'+
+ '<div class="row"><div><div class="muted">TV timer</div><div class="clk" id="c_tclock"></div></div>'+
+ '<div style="display:flex;gap:8px;"><button class="btn" id="c_tstart">Start</button><button class="btn" id="c_treset">Reset</button></div></div>'+
+ '<div class="row" style="margin-top:12px;"><div class="muted">TV timer length</div><div class="step"><button class="btn sq" id="c_tm" aria-label="Five seconds shorter">\u2212</button><input class="inp tin" id="c_tlen" inputmode="text" autocomplete="off" aria-label="TV timer length, minutes and seconds"><button class="btn sq" id="c_tp" aria-label="Five seconds longer">+</button></div></div>'+
+ '<div id="c_prerow" style="margin-top:14px;"><div class="muted" style="margin-bottom:6px;">Presets (tap to load, then Start)</div><div id="c_prebtns" style="display:flex;gap:8px;flex-wrap:wrap;"></div><input class="inp tin" id="c_prein" style="width:100%;margin-top:8px;" placeholder="Presets, like 22, 11, 34, 46" autocomplete="off" aria-label="Edit presets, separated by commas"></div>'+
+ '<div id="c_pdinfo" class="muted" style="margin-top:10px;"></div></div>'+
+ '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;"><button class="btn sm" id="c_sep"></button><button class="btn sm" id="c_clkbtn"></button><button class="btn sm" id="c_ntbtn"></button></div></div>'+
+ '<div style="display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-bottom:12px;"><button class="btn" id="c_back" style="height:60px;">Back</button><button class="btn red" id="c_next" style="height:60px;"></button></div>'+
+ '<div class="card"><div class="muted" id="c_up"></div><div class="list" id="c_list"></div><div class="muted" id="c_end" style="margin-top:10px;"></div></div>'+
+ '<div class="card"><div class="muted" style="margin-bottom:8px;">Test tools</div><div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn sm" id="c_t1">Drill clock: 5 sec left</button><button class="btn sm" id="c_t2">TV timer: 5 sec left</button></div></div>'+
+ '<div class="card"><div class="muted" style="margin-bottom:8px;">Plan</div><div style="display:flex;gap:8px;flex-wrap:wrap;" id="c_plans"></div><div class="small" style="margin-top:8px;">Switching plans resets the clocks.</div><a href="#add" class="btn sm" style="display:inline-flex;align-items:center;margin-top:10px;color:#fff;text-decoration:none;">Add today\u2019s practice</a></div>'+
+ '<button class="btn sm" id="resetall" style="width:100%;">Reset practice to the plan</button></div>';
+}
+function wireControl(){
+ var ids=["title","plans","sbtoggle","sbpanel","sbclock","sbstart","sbreset","qm","qv","qp","lm","lv","lp","nextq","sitwrap","sitsel","sitload","sitnext","sitclear","sitinfo","rnin","bnin","rs","bs","r1","r2","r3","b1","b2","b3","sbundo","sbclear","sbtest","shclock","shstart","shreset","shm","shlen","shp","shshow","shtest","shwrap","shhelp","dbg","count","start","name","mode","note","dclock","dstart","dreset","pm","plen","pp","tvcard","tclock","tstart","treset","tm","tlen","tp","prerow","prebtns","prein","pdinfo","sep","clkbtn","ntbtn","back","next","up","list","end","t1","t2"];
+ u={};ids.forEach(function(k){u[k]=el("c_"+k);});
+ u.listSig=null;u.planSig=null;u.preSig=null;
+ for(var sk2=0;sk2<SIT.length;sk2++){var op=document.createElement("option");op.value=SIT[sk2].n;op.textContent=sitLabel(SIT[sk2]);u.sitsel.appendChild(op);}
+ u.sitload.onclick=function(){loadSit(parseInt(u.sitsel.value,10));};
+ u.sitnext.onclick=nextSit;u.sitclear.onclick=clearSit;
+ u.sbtoggle.onclick=sbToggleView;u.sbstart.onclick=sbClock;u.sbreset.onclick=sbClockReset;
+ u.qm.onclick=function(){sbQ(-1);};u.qp.onclick=function(){sbQ(1);};
+ u.lm.onclick=function(){sbLen(-60);};u.lp.onclick=function(){sbLen(60);};
+ u.nextq.onclick=sbNextQ;
+ u.rnin.onchange=function(){sbName("rn",u.rnin.value);};u.bnin.onchange=function(){sbName("bn",u.bnin.value);};
+ u.r1.onclick=function(){sbScore("red",1);};u.r2.onclick=function(){sbScore("red",2);};u.r3.onclick=function(){sbScore("red",3);};
+ u.b1.onclick=function(){sbScore("black",1);};u.b2.onclick=function(){sbScore("black",2);};u.b3.onclick=function(){sbScore("black",3);};
+ el("c_rfplus").onclick=function(){sbFoul("rf",1);};el("c_rfminus").onclick=function(){sbFoul("rf",-1);};el("c_bfplus").onclick=function(){sbFoul("bf",1);};el("c_bfminus").onclick=function(){sbFoul("bf",-1);};el("c_rfreset").onclick=resetFouls;u.sbundo.onclick=sbUndo;u.sbclear.onclick=sbClearScores;u.sbtest.onclick=sbTestZero;
+ u.shstart.onclick=sbShotToggle;u.shreset.onclick=sbShotReset;u.shshow.onclick=sbShotShow;u.shtest.onclick=shotTest;
+ u.shm.onclick=function(){adjShot(-5);};u.shp.onclick=function(){adjShot(5);};
+ wireTime(u.shlen,function(){return S.sb.shot.len;},setShotLen,5);
+ u.dstart.onclick=toggleDrill;u.dreset.onclick=resetDrill;
+ u.pm.onclick=function(){adjPs(-60);};u.pp.onclick=function(){adjPs(60);};
+ u.tstart.onclick=toggleTv;u.treset.onclick=resetTv;
+ u.tm.onclick=function(){adjTvl(-5);};u.tp.onclick=function(){adjTvl(5);};
+ wireTime(u.plen,function(){return S.ps[S.idx];},setPs,5);
+ wireTime(u.tlen,function(){return S.tvl[S.idx];},setTvl,1);
+ wireTime(u.lv,function(){return S.sb.len;},setSbLen,5);
+ u.prein.onchange=function(){setPresets(u.prein.value);};
+ u.prein.onkeydown=function(e){if(e.key==="Enter"){u.prein.blur();}};
+ u.sep.onclick=toggleSep;u.clkbtn.onclick=toggleClk;u.ntbtn.onclick=toggleNt;
+ u.back.onclick=function(){go(-1);};u.next.onclick=function(){go(1);};
+ u.t1.onclick=function(){setLeft("d",5);};u.t2.onclick=function(){setLeft("t",5);};
+ el("resetall").onclick=resetAll;
+}
+function buildControl(){
+ document.documentElement.classList.remove("tvmode");document.body.classList.remove("tvmode");
+ el("root").innerHTML=controlHtml();
+ wireControl();
+ cur={update:ctlUpdate};
+ setStatus(statusMsg);
+ ctlUpdate();
+}
+
+function ctlUpdate(){
+ var i=S.idx,d=DR[i],hasTv=S.tvl[i]>0,last=DR.length-1,q;
+ u.title.textContent=PLANS[S.plan].title+" controller";
+ var sb=S.sb,sbRem=sbRemain();el("c_rf").textContent=sb.rf;el("c_bf").textContent=sb.bf;
+ u.sbtoggle.textContent=sb.on?"Back to drill screen":"Show scoreboard";
+ u.sbpanel.style.display=sb.on?"block":"none";
+ var hasSit=DR.some(function(x){return /^situations?$/i.test(x.n);});
+ u.sitwrap.style.display=hasSit?"block":"none";
+ if(sb.on){
+  var shr=sb.shot.len-shotElapsed(sb);
+  u.shclock.textContent=String(Math.max(0,Math.ceil(shr)));
+  u.shclock.style.color=shr<=0?"var(--red)":"";
+  u.shstart.textContent=(sb.shot.c.st&&shr>0&&!shotFrozen(sb))?"Pause":"Start";
+  setIn(u.shlen,String(sb.shot.len));
+  u.shshow.textContent=sb.shot.on?"Turn off shot clock":"Turn on shot clock";
+  u.shwrap.style.display=sb.shot.on?"block":"none";
+  u.shhelp.style.display=sb.shot.on?"inline":"none";
+  u.shtest.style.display=sb.shot.on?"inline-block":"none";
+  u.dbg.textContent=BUILD+" | game "+(gameLive(sb)?"running":"stopped")+" | shot "+(sb.shot.c.st?"running":"stopped")+(shotFrozen(sb)?" (held by game end)":"")+" | shot used "+shotElapsed(sb).toFixed(1)+"s of "+sb.shot.len+"s | last saved by "+(S.meta?S.meta.id+" ("+S.meta.b+")":"unknown")+" | this window "+myId+" | updates applied "+snapTaken+", skipped "+snapIgnored+" | clock "+new Date().toTimeString().slice(0,8);
+  u.sbclock.textContent=sbClockStr(sbRem);
+  u.sbclock.style.color=sbRem<=0?"var(--red)":"";
+  u.sbstart.textContent=(sb.c.st&&sbRem>0)?"Pause":"Start";
+  u.qv.textContent=sb.q;setIn(u.lv,mmss(sb.len));
+  if(sb.sit&&SIT[sb.sit-1]){u.sitinfo.textContent=sitInfoText(SIT[sb.sit-1]);if(document.activeElement!==u.sitsel){u.sitsel.value=String(sb.sit);}}
+  else{u.sitinfo.textContent="No situation loaded.";}
+  u.rs.textContent=sb.red;u.bs.textContent=sb.black;
+  if(document.activeElement!==u.rnin&&u.rnin.value!==sb.rn){u.rnin.value=sb.rn;}
+  if(document.activeElement!==u.bnin&&u.bnin.value!==sb.bn){u.bnin.value=sb.bn;}
+ }
+ u.count.textContent="Drill "+(i+1)+" of "+DR.length;
+ var ssum=0;for(q=0;q<i;q++){ssum+=S.ps[q];}
+ var sm=START+Math.round(ssum/60);
+ u.start.textContent="Starts about "+clockTime(sm);
+ u.name.textContent=S.complete?"Practice complete":d.n;
+ u.mode.textContent=d.pd?"Scoring rules built: reset button, resets, best run":"Basic timer, no scoring rules yet";
+ u.note.textContent=d.note?"Coach note: "+d.note:"";u.note.style.display=d.note?"block":"none";
+ var rem=drillRemain();
+ u.dclock.textContent=fmtSigned(rem);u.dclock.style.color=rem<0?"var(--red)":"";
+ u.dstart.textContent=S.d.st?"Pause":"Start";
+ setIn(u.plen,mmss(S.ps[i]));
+ u.tvcard.style.display=hasTv?"block":"none";
+ if(hasTv){
+  var tr=tvRemain();
+  u.tclock.textContent=mmss(Math.max(0,Math.ceil(tr)));
+  u.tstart.textContent=(S.t.st&&tr>0)?"Pause":"Start";
+  setIn(u.tlen,mmss(S.tvl[i]));
+  var pk=S.plan+"|"+i+"|"+S.pre[i].join(",")+"|"+S.tvl[i];
+  if(u.preSig!==pk){
+   u.preSig=pk;u.prebtns.innerHTML="";
+   S.pre[i].forEach(function(v){
+    var pb=document.createElement("button");pb.className="btn"+(v===S.tvl[i]?" sel":"");pb.style.minWidth="68px";
+    pb.textContent=v<60?v+" sec":mmss(v);
+    pb.onclick=function(){loadPreset(v);};
+    u.prebtns.appendChild(pb);
+   });
+  }
+  setIn(u.prein,S.pre[i].map(function(v){return v<60?String(v):mmss(v);}).join(", "));
+  u.pdinfo.textContent=d.pd?"Resets "+S.resets+" \u00b7 Best run "+mmss(S.best):"";
+ }
+ u.t2.style.display=hasTv?"inline-block":"none";
+ u.sep.style.display=d.pd?"none":"inline-block";
+ u.sep.textContent=hasTv?"Remove separate TV timer":"Add separate TV timer";
+ u.clkbtn.textContent=S.clk[i]?"Hide clock on TV":"Show clock on TV";
+ u.ntbtn.style.display=(d.note||d.list)?"inline-block":"none";
+ var what=d.list?"list":"note";
+ u.ntbtn.textContent=S.nt[i]?"Hide "+what+" on TV":"Show "+what+" on TV";
+ u.next.textContent=i<last?"Next drill":"Finish practice";
+ u.up.textContent="Up next: "+(i<last?DR[i+1].n:"Practice complete");
+ var total=0;for(q=0;q<DR.length;q++){total+=S.ps[q];}
+ total=Math.round(total/60);
+ var diff=total-PLAN;
+ u.end.textContent="Projected end "+clockTime(START+total)+" ("+(diff===0?"on plan":(diff>0?"+"+diff+" min":diff+" min"))+")";
+ var psig=S.plan+"|"+planArmed+"|"+Object.keys(PLANS).length;
+ if(u.planSig!==psig){
+  u.planSig=psig;
+  u.plans.innerHTML="";
+  Object.keys(PLANS).reverse().forEach(function(pid){
+   var b=document.createElement("button");b.className="btn sm"+(pid===S.plan?" sel":"");
+   b.textContent=planArmed===pid?"Tap again to switch":PLANS[pid].title+" ("+PLANS[pid].date+")";
+   b.onclick=function(){switchPlan(pid);};
+   u.plans.appendChild(b);
+  });
+ }
+ var sig=S.plan+"|"+i+"|"+S.ps.join(",");
+ if(u.listSig!==sig){
+  u.listSig=sig;
+  var h="";
+  for(q=0;q<DR.length;q++){
+   h+='<div class="li'+(q===i?" cur":(q<i?" done":""))+'"><span></span><span>'+fmtPlan(S.ps[q])+'</span></div>';
+  }
+  u.list.innerHTML=h;
+  var rows=u.list.children;
+  for(q=0;q<DR.length;q++){rows[q].children[0].textContent=(q<i?"\u2713 ":"")+DR[q].n;}
+ }
+}
+
+
+var ip={};
+function ipCourt(){
+ return '<svg viewBox="0 0 940 500" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><g fill="none" stroke="rgba(255,255,255,0.16)" stroke-width="3">'+
+  '<rect x="10" y="10" width="920" height="480"/><line x1="470" y1="10" x2="470" y2="490"/><circle cx="470" cy="250" r="62"/>'+
+  '<rect x="10" y="170" width="190" height="160"/><rect x="740" y="170" width="190" height="160"/>'+
+  '<circle cx="200" cy="250" r="62"/><circle cx="740" cy="250" r="62"/>'+
+  '<path d="M10 60 H140 A190 190 0 0 1 140 440 H10"/><path d="M930 60 H800 A190 190 0 0 0 800 440 H930"/>'+
+  '<circle cx="52" cy="250" r="12"/><circle cx="888" cy="250" r="12"/></g></svg>';
+}
+function ipPts(team,cls){
+ var o='';
+ [1,2,3].forEach(function(n){o+='<button class="ip-pt '+cls+'" id="i_'+team+n+'" aria-label="'+(cls==='red'?'Red':'Black')+' plus '+n+'">+'+n+'</button>';});
+ o+='<button class="ip-foul" id="i_'+team+'foul" aria-label="Add '+(cls==='red'?'Red':'Black')+' team foul">+ Foul</button>';return o;
+}
+function buildIpad(){
+ document.documentElement.classList.remove("tvmode");document.body.classList.remove("tvmode");
+ el("root").innerHTML='<div class="ip">'+
+  '<div class="ip-top"><div><b id="i_plan"></b> <span class="muted" id="i_count"></span></div>'+
+  '<div class="ip-acts"><button class="ipbtn red" id="i_mode"></button><button class="ipbtn" id="i_setbtn">Settings</button><a class="small" href="#">Home</a><a class="small" href="#control">Phone layout</a></div></div>'+
+  '<div id="status" class="banner" style="display:none;margin:0;"></div>'+
+  '<div class="ip-main" id="i_drill">'+
+   '<div class="card ip-list" id="i_list"></div>'+
+   '<div class="ip-panel">'+
+    '<div class="card"><div class="ip-name" id="i_name"></div><div class="muted" id="i_start"></div><div id="i_note" style="margin-top:8px;font-size:18px;white-space:pre-wrap;"></div></div>'+
+    '<div class="ip-clocks">'+
+     '<div class="card"><div class="muted">Drill time <span id="i_dplan"></span></div><div class="ip-big" id="i_dclock"></div><div class="ip-row"><button class="ipbtn big" id="i_dstart">Start</button><button class="ipbtn big" id="i_dreset">Reset</button></div></div>'+
+     '<div class="card" id="i_tvbox"><div class="muted">TV timer</div><div class="ip-big" id="i_tclock"></div><div class="ip-row"><button class="ipbtn big" id="i_tstart">Start</button><button class="ipbtn big" id="i_treset">Reset</button></div><div class="ip-row" id="i_pre" style="flex-wrap:wrap;"></div><div class="muted" id="i_pdinfo" style="margin-top:8px;"></div></div>'+
+    '</div>'+
+    '<div class="ip-nav"><button class="ipbtn big" id="i_back">Back</button><button class="ipbtn big red" id="i_next">Next drill</button></div>'+
+    '<div class="muted" id="i_up"></div>'+
+   '</div></div>'+
+  '<div class="ip-main" id="i_sb" hidden>'+
+   '<div class="ip-scorebar">'+
+    '<div class="ip-team red"><div><div class="ip-tname" id="i_rn"></div><div class="ip-foultotal">TEAM FOULS <b id="i_rf">0</b></div></div><div class="ip-score" id="i_rs"></div></div>'+
+    '<div class="ip-mid"><button class="ip-clockbtn" id="i_clock" aria-label="Start or pause the game clock"><span id="i_gc"></span></button>'+
+     '<div class="ip-meta"><span id="i_q"></span><span id="i_shotbox" style="display:flex;gap:8px;align-items:center;"><button class="ip-shot" id="i_shot" aria-label="Start or pause the shot clock">SHOT<b id="i_sv"></b></button><button class="ipbtn" id="i_shreset" style="min-height:44px;padding:0 14px;">Reset</button></span></div></div>'+
+    '<div class="ip-team blk"><div class="ip-score" id="i_bs"></div><div><div class="ip-tname" id="i_bn"></div><div class="ip-foultotal">TEAM FOULS <b id="i_bf">0</b></div></div></div>'+
+   '</div>'+
+   '<div class="ip-sit" id="i_sitinfo" hidden></div>'+
+   '<div class="ip-court">'+ipCourt()+
+    '<div class="ip-pts" style="left:25%;">'+ipPts('r','red')+'</div>'+
+    '<div class="ip-pts" style="left:75%;">'+ipPts('b','blk')+'</div>'+
+    '<button class="ipbtn ip-undo" id="i_undo">Undo last action</button>'+
+    '<button class="ipbtn red big ip-start" id="i_sbstart">Start clock</button>'+
+   '</div>'+
+   '<div class="ip-bottom"><button class="ipbtn" id="i_nextq">Next quarter</button><button class="ipbtn" id="i_gcreset">Reset clock</button><button class="ipbtn" id="i_shtog">Shot clock</button><button class="ipbtn" id="i_setbtn2">Settings</button></div>'+
+  '</div>'+
+  '<div class="ip-sheet" id="i_sheet" hidden><div class="ip-sheetbox"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><b style="font-size:20px;">Settings</b><button class="ipbtn" id="i_close">Done</button></div><div id="i_sheetbody"></div></div></div>'+
+ '</div>';
+ var ids=["plan","count","mode","setbtn","drill","sb","sheet","sheetbody","close","list","name","start","note","dplan","dclock","dstart","dreset","tvbox","tclock","tstart","treset","pre","pdinfo","back","next","up","rn","rs","bn","bs","clock","gc","q","shotbox","shot","sv","shreset","sitinfo","r1","r2","r3","b1","b2","b3","undo","sbstart","nextq","gcreset","shtog","setbtn2"];
+ ip={};ids.forEach(function(k){ip[k]=el("i_"+k);});
+ ip.listSig=null;ip.preSig=null;
+ ip.sheetbody.innerHTML=controlHtml().replace('id="status"','id="status_c"');
+ wireControl();
+ ip.mode.onclick=sbToggleView;
+ ip.setbtn.onclick=function(){ip.sheet.hidden=false;ctlUpdate();};
+ ip.setbtn2.onclick=ip.setbtn.onclick;
+ ip.close.onclick=function(){ip.sheet.hidden=true;};
+ ip.dstart.onclick=toggleDrill;ip.dreset.onclick=resetDrill;ip.tstart.onclick=toggleTv;ip.treset.onclick=resetTv;
+ ip.back.onclick=function(){go(-1);};ip.next.onclick=function(){go(1);};
+ ip.clock.onclick=sbClock;ip.sbstart.onclick=sbClock;
+ ip.r1.onclick=function(){sbScore("red",1);};ip.r2.onclick=function(){sbScore("red",2);};ip.r3.onclick=function(){sbScore("red",3);};
+ ip.b1.onclick=function(){sbScore("black",1);};ip.b2.onclick=function(){sbScore("black",2);};ip.b3.onclick=function(){sbScore("black",3);};
+ el("i_rfoul").onclick=function(){sbFoul("rf",1);};el("i_bfoul").onclick=function(){sbFoul("bf",1);};ip.undo.onclick=sbUndo;ip.nextq.onclick=sbNextQ;ip.gcreset.onclick=sbClockReset;
+ ip.shtog.onclick=sbShotShow;ip.shot.onclick=sbShotToggle;ip.shreset.onclick=sbShotReset;
+ cur={update:ipadUpdate};
+ setStatus(statusMsg);
+ ipadUpdate();
+}
+function ipadUpdate(){
+ var i=S.idx,d=DR[i],sb=S.sb,hasTv=S.tvl[i]>0,q;
+ ip.plan.textContent=PLANS[S.plan].title;
+ ip.count.textContent="Drill "+(i+1)+" of "+DR.length+": "+d.n;
+ ip.mode.textContent=sb.on?"Back to drill screen":"Show scoreboard on TV";
+ ip.drill.hidden=!!sb.on;ip.sb.hidden=!sb.on;
+ if(!sb.on){
+  var ssum=0;for(q=0;q<i;q++){ssum+=S.ps[q];}
+  ip.name.textContent=S.complete?"Practice complete":d.n;
+  ip.start.textContent="Starts about "+clockTime(START+Math.round(ssum/60))+" \u00b7 planned "+mmss(S.ps[i]);
+  var parts=[];
+  if(d.note){parts.push("Coach note: "+d.note);}
+  if(d.list){parts.push("List on TV: "+d.list.map(function(t,k){return (k+1)+". "+t;}).join("   "));}
+  ip.note.textContent=parts.join("\n");ip.note.hidden=!parts.length;
+  var rem=drillRemain();
+  ip.dclock.textContent=fmtSigned(rem);ip.dclock.style.color=rem<0?"var(--red)":"";
+  ip.dstart.textContent=S.d.st?"Pause":"Start";
+  ip.dplan.textContent="(planned "+mmss(S.ps[i])+")";
+  ip.tvbox.hidden=!hasTv;
+  if(hasTv){
+   var tr=tvRemain();
+   ip.tclock.textContent=mmss(Math.max(0,Math.ceil(tr)));
+   ip.tstart.textContent=(S.t.st&&tr>0)?"Pause":"Start";
+   var pk=S.plan+"|"+i+"|"+S.pre[i].join(",")+"|"+S.tvl[i];
+   if(ip.preSig!==pk){
+    ip.preSig=pk;ip.pre.innerHTML="";
+    S.pre[i].forEach(function(v){
+     var pb=document.createElement("button");pb.className="ipbtn"+(v===S.tvl[i]?" red":"");pb.style.flex="0 0 auto";
+     pb.textContent=v<60?v+" sec":mmss(v);pb.onclick=function(){loadPreset(v);};ip.pre.appendChild(pb);
+    });
+   }
+   ip.pdinfo.textContent=d.pd?"Resets "+S.resets+" \u00b7 Best run "+mmss(S.best):"";
+  }
+  var sig=S.plan+"|"+i+"|"+S.ps.join(",");
+  if(ip.listSig!==sig){
+   ip.listSig=sig;
+   var h="";
+   for(q=0;q<DR.length;q++){h+='<div class="li'+(q===i?" cur":(q<i?" done":""))+'" style="padding:12px 10px;font-size:16px;"><span></span><span>'+fmtPlan(S.ps[q])+'</span></div>';}
+   ip.list.innerHTML=h;
+   var rows=ip.list.children;
+   for(q=0;q<DR.length;q++){rows[q].children[0].textContent=(q<i?"\u2713 ":"")+DR[q].n;}
+  }
+  ip.next.disabled=S.complete;ip.dstart.disabled=S.complete;ip.tstart.disabled=S.complete;ip.next.textContent=i<DR.length-1?"Next drill":"Finish practice";
+  ip.up.textContent="Up next: "+(i<DR.length-1?DR[i+1].n:"Practice complete");
+ }else{
+  var r2=sbRemain();
+  ip.rn.textContent=String(sb.rn||"RED").toUpperCase();ip.bn.textContent=String(sb.bn||"BLACK").toUpperCase();
+  ip.rs.textContent=sb.red;ip.bs.textContent=sb.black;el("i_rf").textContent=sb.rf;el("i_bf").textContent=sb.bf;
+  ip.gc.textContent=sbClockStr(r2);
+  ip.clock.style.color=(r2<=0&&elapsed(sb.c)>0.05)?"#ff5a50":"#fff";
+  ip.sbstart.textContent=(sb.c.st&&r2>0)?"Pause clock":"Start clock";
+  ip.q.textContent="QUARTER "+sb.q;
+  ip.shotbox.hidden=!sb.shot.on;
+  if(sb.shot.on){
+   var shr=sb.shot.len-shotElapsed(sb);
+   ip.sv.textContent=Math.max(0,Math.ceil(shr));
+   ip.sv.style.color=shr<=0?"#ff5a50":"#fff";
+  }
+  ip.shtog.textContent=sb.shot.on?"Turn off shot clock":"Turn on shot clock";
+  if(sb.sit&&SIT[sb.sit-1]){ip.sitinfo.hidden=false;ip.sitinfo.textContent=sitInfoText(SIT[sb.sit-1]);}else{ip.sitinfo.hidden=true;}
+ }
+ if(!ip.sheet.hidden){ctlUpdate();}
+}
+
+function practiceDigits(text){if(dsp.clock.dataset.value===text){return;}dsp.clock.dataset.value=text;var svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("viewBox","0 0 260 130");svg.setAttribute("role","img");svg.setAttribute("aria-label",text);svg.innerHTML=ledClock(text);dsp.clock.replaceChildren(svg);}
+function controllerFooter(){var h=location.hash;if(h==="#display"){return;}var footer=document.createElement("footer");footer.className="controller-mottos";footer.innerHTML="<span>WIN THE MOMENT</span><span>TOGETHER. WE BELIEVE.</span>";var host=document.querySelector(".ip")||el("root");host.appendChild(footer);}
+
+function route(){
+ var h=location.hash.replace("#","");
+ if(h==="add"){buildAdd();}
+ else if(h==="display"){buildDisplay();}
+ else if(h==="control"){buildControl();}
+ else if(h==="ipad"){buildIpad();}
+ else{buildHome();}
+ controllerFooter();
+}
+window.addEventListener("hashchange",route);
+window.addEventListener("resize",function(){dsp.fitKey=null;dsp.sbFitKey=null;if(cur){cur.update();}});
+setInterval(function(){if(cur){cur.update();}},100);
+bootApp();
+</script>
+</body>
+</html>
